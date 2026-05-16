@@ -1,16 +1,15 @@
-import { useState } from 'react';
-import { BrainSeedPanel } from './components/BrainSeedPanel';
-import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
-import { OutreachTestPanel } from './components/OutreachTestPanel';
+import { useState } from "react";
+import { DemoAutopsyPanel } from "./components/DemoAutopsyPanel";
+import { OutreachTestPanel } from "./components/OutreachTestPanel";
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
-type View = 'detail' | 'autopsy';
+type View = "detail" | "autopsy";
 
 export function Dashboard() {
   const [bookedToday, _setBookedToday] = useState(0);
   const [pagesIndexed, _setPagesIndexed] = useState<number | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const [view, setView] = useState<View>('detail');
+  const [view, setView] = useState<View>("detail");
 
   const onOpenOverlay = async () => {
     await window.pmf.openOverlay();
@@ -24,10 +23,10 @@ export function Dashboard() {
 
   const openAutopsy = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    setView('autopsy');
+    setView("autopsy");
   };
 
-  const closeAutopsy = () => setView('detail');
+  const closeAutopsy = () => setView("detail");
 
   return (
     <div className="dashboard">
@@ -35,11 +34,13 @@ export function Dashboard() {
         <div className="dashboard__brand">Arvya Closer</div>
         <div className="dashboard__scoreboard">
           <div className="scoreboard__big">
-            <div className="scoreboard__value">{pagesIndexed ?? '—'}</div>
+            <div className="scoreboard__value">{pagesIndexed ?? "—"}</div>
             <div className="scoreboard__label">pages indexed</div>
           </div>
           <div className="scoreboard__small">
-            <span className={`scoreboard__pulse ${bookedToday > 0 ? 'live' : ''}`} />
+            <span
+              className={`scoreboard__pulse ${bookedToday > 0 ? "live" : ""}`}
+            />
             <span>{bookedToday} booked LIVE during hackathon</span>
           </div>
         </div>
@@ -56,8 +57,10 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main className={`dashboard__main ${view === 'autopsy' ? 'dashboard__main--autopsy' : ''}`}>
-        {view === 'autopsy' ? (
+      <main
+        className={`dashboard__main ${view === "autopsy" ? "dashboard__main--autopsy" : ""}`}
+      >
+        {view === "autopsy" ? (
           <DemoAutopsyPanel onClose={closeAutopsy} />
         ) : (
           <>
@@ -78,7 +81,36 @@ export function Dashboard() {
             </section>
 
             <aside className="dashboard__rail-right">
-              <BrainSeedPanel />
+              <section className="live-insights">
+                <div className="live-insights__header">
+                  <div>
+                    <div className="rail__title">Live Insights</div>
+                    <div className="live-insights__title">DealCloud wedge</div>
+                  </div>
+                  <span className="live-insights__status">ready</span>
+                </div>
+
+                <div className="live-insights__item live-insights__item--hot">
+                  <div className="live-insights__label">Strongest pain</div>
+                  <div className="live-insights__value">
+                    Buyer tracker stale in Excel
+                  </div>
+                </div>
+
+                <div className="live-insights__item">
+                  <div className="live-insights__label">Likely objection</div>
+                  <div className="live-insights__value">
+                    DealCloud, not Salesforce
+                  </div>
+                </div>
+
+                <div className="live-insights__item">
+                  <div className="live-insights__label">Best next move</div>
+                  <div className="live-insights__value">
+                    Open Live Overlay before the call replay
+                  </div>
+                </div>
+              </section>
             </aside>
           </>
         )}
