@@ -49,7 +49,10 @@ interface PMFApi {
   };
 
   groq: {
-    transcribe: (audioBytes: Uint8Array) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    transcribe: (
+      audioBytes: Uint8Array,
+      mimeType?: string,
+    ) => Promise<{ ok: boolean; text?: string; error?: string }>;
   };
 
   anthropic: {

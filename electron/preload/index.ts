@@ -17,8 +17,8 @@ const api = {
       ipcRenderer.invoke('pmf:hog:deep-research', args),
   },
   groq: {
-    transcribe: (audioBytes: Uint8Array) =>
-      ipcRenderer.invoke('pmf:groq:transcribe', audioBytes),
+    transcribe: (audioBytes: Uint8Array, mimeType?: string) =>
+      ipcRenderer.invoke('pmf:groq:transcribe', audioBytes, mimeType),
   },
   anthropic: {
     chat: (system: string, user: string) =>
