@@ -14,7 +14,7 @@ export type HogDeepResearch = {
 
 const BASE_URL = 'https://developer.thehog.ai/api';
 const POLL_INTERVAL_MS = 5000; // 5s — avoid HOG's 429 rate limit on polling
-const POLL_TIMEOUT_MS = 120_000; // 2 min for slow deep-research operations
+const POLL_TIMEOUT_MS = 240_000; // 4 min — deep-research can be slow (verified empirically)
 
 function authHeaders(): Record<string, string> {
   const accessKey = process.env.HOG_ACCESS_KEY;
