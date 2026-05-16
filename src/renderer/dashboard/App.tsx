@@ -3,6 +3,7 @@ import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
 import { OutreachTestPanel } from './components/OutreachTestPanel';
 import { FindEventsPanel } from './components/FindEventsPanel';
+import { AskBrainPanel } from './components/AskBrainPanel';
 import { LearningReceipt } from './components/LearningReceipt';
 import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
@@ -243,6 +244,8 @@ export function Dashboard() {
                       Paste a LinkedIn URL. Watch your brain do the rest.
                     </div>
                   </div>
+
+                  <AskBrainPanel />
 
                   <OutreachTestPanel />
 
