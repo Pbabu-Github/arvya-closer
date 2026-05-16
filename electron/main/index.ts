@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { gbrainClient } from '../../src/lib/gbrain-client';
@@ -205,8 +206,22 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('pmf:autopsy:load-cached', () => {
-    // TODO(Prashanth — lane/dash): pre-cache demo autopsy result and load here
-    return { ok: false, error: 'pmf:autopsy:load-cached not yet implemented' };
+    const path = join(process.cwd(), 'data', 'demo-autopsy-result.json');
+    if (!existsSync(path)) {
+      return {
+        ok: false,
+        error: 'precache not run yet — run scripts/precache-demo-autopsy.ts',
+      };
+    }
+    try {
+      const data = JSON.parse(readFileSync(path, 'utf8'));
+      return { ok: true, ...data };
+    } catch (error) {
+      return {
+        ok: false,
+        error: `failed to read autopsy cache: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
   });
 
   ipcMain.handle('pmf:coach:next-card', async (_, _context: unknown) => {
