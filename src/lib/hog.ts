@@ -8,6 +8,7 @@ export type HogEnrichment = {
 const BASE_URL = 'https://developer.thehog.ai/api';
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 30_000;
+const DEFAULT_FIELDS = ['name', 'headline', 'company', 'email', 'title', 'location'];
 
 function authHeaders(): Record<string, string> {
   const accessKey = process.env.HOG_ACCESS_KEY;
@@ -37,33 +38,36 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function enrich(linkedinUrl: string): Promise<HogEnrichment> {
+export async function enrich(linkedinUrl: string, fields: string[] = DEFAULT_FIELDS): Promise<HogEnrichment> {
   const headers = authHeaders();
 
   const createResponse = await fetch(`${BASE_URL}/enrichments`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
-    body: JSON.stringify({ linkedin_url: linkedinUrl }),
+    body: JSON.stringify({
+      identifier: { linkedin_url: linkedinUrl },
+      fields,
+    }),
   });
 
-  const created = await asJson<{ id?: string; enrichment_id?: string }>(
+  const created = await asJson<{ id?: string; operationId?: string }>(
     createResponse,
     'hog enrichment create',
   );
-  const id = created.id ?? created.enrichment_id;
+  const id = created.id ?? created.operationId;
   if (!id) throw new Error('hog enrichment response missing id');
 
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
     const pollResponse = await fetch(`${BASE_URL}/enrichments/${id}`, { headers });
-    const poll = await asJson<{ status?: string; result?: unknown }>(
+    const poll = await asJson<{ status?: string; result?: unknown; error?: unknown }>(
       pollResponse,
       'hog enrichment poll',
     );
     const status = (poll.status ?? '').toLowerCase();
-    if (status === 'completed' || status === 'success' || status === 'done') {
-      return { id, status: poll.status ?? 'completed', result: poll.result, raw: poll };
+    if (status === 'succeeded' || status === 'completed' || status === 'success' || status === 'done') {
+      return { id, status: poll.status ?? 'succeeded', result: poll.result, raw: poll };
     }
     if (status === 'failed' || status === 'error') {
       throw new Error(`hog enrichment ${id} failed: ${JSON.stringify(poll).slice(0, 200)}`);
