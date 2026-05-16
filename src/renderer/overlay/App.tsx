@@ -36,6 +36,8 @@ export function Overlay() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const coachTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listeningRef = useRef<boolean>(false);
   const transcriptRef = useRef<string[]>([]);
 
   // Keep ref in sync so timer callbacks see fresh data
@@ -105,6 +107,15 @@ export function Overlay() {
 
   // -----------------------------------------------------------
   // LIVE AUDIO CAPTURE — getUserMedia → MediaRecorder → Groq Whisper
+  //
+  // We do NOT use MediaRecorder.start(timeslice). With timeslice, only the
+  // FIRST chunk carries the webm container header; subsequent chunks are raw
+  // fragments that Whisper cannot decode and answers with hallucinations
+  // ("Thanks for watching.", "🎵", etc).
+  //
+  // Instead we run a chain of short recordings: every CHUNK_MS we stop the
+  // recorder (which emits one complete, self-contained blob), then immediately
+  // start a fresh recorder on the same stream. Each blob is a valid webm.
   // -----------------------------------------------------------
   const startListening = async () => {
     if (listening) return;
@@ -112,50 +123,19 @@ export function Overlay() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-
-      // Build a fresh MediaRecorder. Default codec is audio/webm; Groq Whisper accepts webm.
-      const recorder = new MediaRecorder(stream, {
-        mimeType: pickMimeType(),
-        audioBitsPerSecond: 96_000,
-      });
-      recorderRef.current = recorder;
-
-      recorder.ondataavailable = async (event) => {
-        if (!event.data || event.data.size < 2_000) return; // ignore micro-chunks
-        try {
-          const buf = await event.data.arrayBuffer();
-          const bytes = new Uint8Array(buf);
-          const resp = (await window.pmf.groq.transcribe(bytes)) as {
-            ok: boolean;
-            text?: string;
-            error?: string;
-          };
-          if (resp.ok && resp.text && resp.text.trim()) {
-            const line = resp.text.trim();
-            setTranscript((t) => [...t, line].slice(-MAX_TRANSCRIPT_TURNS));
-          } else if (!resp.ok && resp.error) {
-            console.warn('[overlay] groq transcribe error:', resp.error);
-          }
-        } catch (e) {
-          console.error('[overlay] chunk send failed', e);
-        }
-      };
-
-      recorder.onerror = (event) => {
-        console.error('[overlay] recorder error', event);
-        setListenError(String((event as unknown as { error?: Error }).error?.message ?? 'recorder error'));
-      };
-
-      // Start recording. Use timeslice so ondataavailable fires every CHUNK_MS.
-      recorder.start(CHUNK_MS);
+      listeningRef.current = true;
       setListening(true);
+      spawnRecorder(stream);
 
       // Trigger coach engine periodically on the accumulated transcript
       coachTimerRef.current = setInterval(async () => {
-        if (transcriptRef.current.length === 0) return;
+        const turns = transcriptRef.current.filter(
+          (line) => !line.startsWith('[demo] ') && !isLikelyHallucination(line),
+        );
+        if (turns.length === 0) return;
         try {
           const r = (await window.pmf.coach.nextCard({
-            lastTurns: transcriptRef.current,
+            lastTurns: turns,
             callStage: 'live',
           })) as { ok: boolean; card?: CoachCard; result?: CoachCard };
           const newCard = (r.card ?? r.result) as CoachCard | undefined;
@@ -166,14 +146,91 @@ export function Overlay() {
       }, COACH_INTERVAL_MS);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setListenError(msg.includes('NotAllowed') ? 'Mic permission denied. Allow in System Settings → Privacy → Microphone.' : msg);
+      setListenError(
+        msg.includes('NotAllowed')
+          ? 'Mic permission denied. Allow in System Settings → Privacy → Microphone.'
+          : msg,
+      );
+      listeningRef.current = false;
       setListening(false);
     }
   };
 
+  const spawnRecorder = (stream: MediaStream) => {
+    if (!listeningRef.current) return;
+    const mime = pickMimeType();
+    const recorder = new MediaRecorder(stream, {
+      mimeType: mime,
+      audioBitsPerSecond: 96_000,
+    });
+    recorderRef.current = recorder;
+    const chunks: BlobPart[] = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) chunks.push(event.data);
+    };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: mime });
+      // Restart immediately so we don't drop audio between chunks
+      if (listeningRef.current) spawnRecorder(stream);
+
+      if (blob.size < 4_000) return; // < ~330ms of opus @ 96kbps — drop noise
+      try {
+        const buf = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const resp = (await window.pmf.groq.transcribe(bytes, mime)) as {
+          ok: boolean;
+          text?: string;
+          error?: string;
+        };
+        if (resp.ok && resp.text && resp.text.trim()) {
+          const line = resp.text.trim();
+          if (isLikelyHallucination(line)) {
+            console.debug('[overlay] dropping hallucination:', line);
+            return;
+          }
+          setTranscript((t) => [...t, line].slice(-MAX_TRANSCRIPT_TURNS));
+        } else if (!resp.ok && resp.error) {
+          console.warn('[overlay] groq transcribe error:', resp.error);
+        }
+      } catch (e) {
+        console.error('[overlay] chunk send failed', e);
+      }
+    };
+
+    recorder.onerror = (event) => {
+      console.error('[overlay] recorder error', event);
+      setListenError(
+        String((event as unknown as { error?: Error }).error?.message ?? 'recorder error'),
+      );
+    };
+
+    recorder.start();
+    // Stop after CHUNK_MS to produce one complete, self-decoding blob
+    chunkTimerRef.current = setTimeout(() => {
+      if (recorder.state === 'recording') {
+        try {
+          recorder.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    }, CHUNK_MS);
+  };
+
   const stopListening = () => {
+    listeningRef.current = false;
+    if (chunkTimerRef.current) {
+      clearTimeout(chunkTimerRef.current);
+      chunkTimerRef.current = null;
+    }
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      try { recorderRef.current.stop(); } catch { /* ignore */ }
+      try {
+        recorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -276,4 +333,29 @@ function pickMimeType(): string {
     if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) return t;
   }
   return 'audio/webm';
+}
+
+/**
+ * Whisper hallucinates a fixed bag of phrases on silent / near-silent / noisy
+ * audio. Drop these so they don't poison the transcript window the coach reads.
+ * Pattern catalog from openai/whisper#928, #1762 + Groq's whisper-large-v3
+ * behavior on demo Mac mic input.
+ */
+const HALLUCINATION_PATTERNS: RegExp[] = [
+  /^[\s.,?!♪♫♬♭♮♯]*$/u, // empty / only punctuation / music notes
+  /thanks?\s+(for|so much\s+for)\s+watching/i,
+  /thank\s+you\s+(so much\s+)?for\s+watching/i,
+  /please\s+(like|subscribe)/i,
+  /subscribe\s+(to\s+)?(my|the)\s+channel/i,
+  /see\s+you\s+(in\s+the\s+)?next\s+(video|time)/i,
+  /^\s*you\s*$/i,
+  /^\s*bye\s*\.?\s*$/i,
+  /^\s*(thanks|thank you)\.?\s*$/i,
+  /♪/,
+];
+
+function isLikelyHallucination(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length < 3) return true;
+  return HALLUCINATION_PATTERNS.some((re) => re.test(trimmed));
 }
