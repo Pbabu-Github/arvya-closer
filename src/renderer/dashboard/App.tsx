@@ -9,6 +9,90 @@ import { useCountUp } from '../hooks/useCountUp';
 
 type View = 'home' | 'autopsy' | 'events';
 
+// ─────────────────────────────────────────────────────────────
+// Inline SVG primitives (matches the design-kit Icon / wordmark)
+// ─────────────────────────────────────────────────────────────
+
+function Icon({ name, size = 14 }: { name: string; size?: number }) {
+  const paths: Record<string, JSX.Element> = {
+    sparkles: (
+      <>
+        <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5z" />
+        <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z" />
+        <path d="M5 14l.6 1.8L7.4 16.4l-1.8.6L5 18.8l-.6-1.8L2.6 16.4l1.8-.6z" />
+      </>
+    ),
+    circleDot: (
+      <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="3" fill="currentColor" />
+      </>
+    ),
+    autopsy: (
+      <>
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+      </>
+    ),
+    send: (
+      <>
+        <line x1="22" y1="2" x2="11" y2="13" />
+        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+      </>
+    ),
+    phone: (
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    ),
+    eye: (
+      <>
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </>
+    ),
+    brain: (
+      <>
+        <path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-3 3 3 3 0 0 0 0 6 3 3 0 0 0 3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0 3-3 3 3 0 0 0 0-6 3 3 0 0 0-3-3 3 3 0 0 0-3-3z" />
+        <path d="M12 5v18" />
+      </>
+    ),
+    search: (
+      <>
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </>
+    ),
+  };
+  const p = paths[name];
+  if (!p) return null;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0 }}
+    >
+      {p}
+    </svg>
+  );
+}
+
+function ArvyaWordmark() {
+  return (
+    <span className="titlebar__brand">
+      <svg width={15} height={15} viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+        <path d="M8 6 L24 16 L8 26 Z" fill="currentColor" opacity="0.16" />
+        <path d="M8 6 L24 16 L8 26" stroke="currentColor" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={8} cy={16} r={2} fill="currentColor" />
+      </svg>
+      arvya
+    </span>
+  );
+}
+
 export function Dashboard() {
   const [pagesIndexed, setPagesIndexed] = useState<number | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
@@ -51,33 +135,41 @@ export function Dashboard() {
     <div className="dashboard">
       {/* ---------- TITLEBAR ---------- */}
       <header className="titlebar">
-        <div className="titlebar__brand">
-          <span className="dot dot--accent" /> Arvya Closer
+        <ArvyaWordmark />
+
+        <div className="live-pill">
+          <span className={`dot ${pagesIndexed === null ? 'dot--idle' : 'dot--ok dot--pulse'}`} />
+          <span>
+            <strong>{pagesIndexed === null ? '—' : animatedPages.toLocaleString()}</strong>{' '}
+            pages · brain live
+          </span>
         </div>
 
         <div className="titlebar__spacer" />
 
         <div className="titlebar__search">
+          <Icon name="search" size={13} />
           <span className="titlebar__search-text">Ask the brain — DealCloud, security, buyer tracker…</span>
-          <span className="kbd">⌘K</span>
+          <span className="kbd">⌘</span>
+          <span className="kbd">K</span>
         </div>
 
+        <div className="titlebar__spacer" />
+
         <div className="titlebar__right">
-          <div className="live-pill">
-            <span className={`dot ${pagesIndexed === null ? 'dot--idle' : 'dot--ok dot--pulse'}`} />
-            <span>
-              <strong>{pagesIndexed === null ? '—' : animatedPages.toLocaleString()}</strong>
-              {' '}
-              pages · brain live
-            </span>
-          </div>
-          {overlayOpen ? (
-            <button onClick={onCloseOverlay} className="btn btn--sm">Hide Overlay</button>
-          ) : (
-            <button onClick={onOpenOverlay} className="btn btn--primary btn--sm">Open Live Overlay</button>
-          )}
           <button onClick={() => setReceiptOpen(true)} className="btn btn--ghost btn--sm">End Call</button>
-          <div className="avatar">PB</div>
+          {overlayOpen ? (
+            <button onClick={onCloseOverlay} className="btn btn--sm">
+              <Icon name="eye" size={12} />
+              Hide overlay
+            </button>
+          ) : (
+            <button onClick={onOpenOverlay} className="btn btn--primary btn--sm">
+              <Icon name="eye" size={12} />
+              Open Live Overlay
+            </button>
+          )}
+          <span className="avatar">PB</span>
         </div>
       </header>
 
@@ -94,37 +186,37 @@ export function Dashboard() {
                 className={`nav-item ${view === 'home' ? 'nav-item--active' : ''}`}
                 onClick={() => setView('home')}
               >
-                <span className="nav-item__icon">⌂</span>
-                <span className="nav-item__label">Home</span>
-                <span className="nav-item__shortcut">⌘1</span>
+                <span className="nav-item__icon"><Icon name="sparkles" /></span>
+                <span className="nav-item__label">Today</span>
+                <span className="nav-item__shortcut">1</span>
               </button>
               <button
                 className={`nav-item ${view === 'events' ? 'nav-item--active' : ''}`}
                 onClick={() => setView('events')}
               >
-                <span className="nav-item__icon">◎</span>
+                <span className="nav-item__icon"><Icon name="circleDot" /></span>
                 <span className="nav-item__label">Find events</span>
-                <span className="nav-item__shortcut">⌘2</span>
+                <span className="nav-item__shortcut">2</span>
               </button>
               <button className="nav-item" onClick={() => setView('autopsy')}>
-                <span className="nav-item__icon">◧</span>
+                <span className="nav-item__icon"><Icon name="autopsy" /></span>
                 <span className="nav-item__label">Demo autopsy</span>
                 <span className="nav-item__count">15</span>
               </button>
 
               <div className="sidebar__section">Pipeline</div>
               <button className="nav-item">
-                <span className="nav-item__icon">→</span>
+                <span className="nav-item__icon"><Icon name="send" /></span>
                 <span className="nav-item__label">Outreach drafts</span>
                 <span className="nav-item__count">0</span>
               </button>
               <button className="nav-item">
-                <span className="nav-item__icon">●</span>
+                <span className="nav-item__icon"><Icon name="phone" /></span>
                 <span className="nav-item__label">Booked demos</span>
                 <span className="nav-item__count">0</span>
               </button>
               <button className="nav-item">
-                <span className="nav-item__icon">◆</span>
+                <span className="nav-item__icon"><Icon name="brain" /></span>
                 <span className="nav-item__label">Past calls</span>
                 <span className="nav-item__count">{pagesIndexed ? Math.floor(pagesIndexed / 12) : '—'}</span>
               </button>
@@ -133,7 +225,7 @@ export function Dashboard() {
 
               <div className="sidebar__section">Status</div>
               <div className="nav-item" style={{ cursor: 'default' }}>
-                <span className="dot dot--ok" />
+                <span className="nav-item__icon"><span className="dot dot--ok" /></span>
                 <span className="nav-item__label">gbrain · live</span>
               </div>
             </aside>

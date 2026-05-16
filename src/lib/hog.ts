@@ -13,8 +13,8 @@ export type HogDeepResearch = {
 };
 
 const BASE_URL = 'https://developer.thehog.ai/api';
-const POLL_INTERVAL_MS = 2500;
-const POLL_TIMEOUT_MS = 90_000;
+const POLL_INTERVAL_MS = 5000; // 5s — avoid HOG's 429 rate limit on polling
+const POLL_TIMEOUT_MS = 120_000; // 2 min for slow deep-research operations
 
 function authHeaders(): Record<string, string> {
   const accessKey = process.env.HOG_ACCESS_KEY;
@@ -50,14 +50,24 @@ export async function enrich(linkedinUrl: string): Promise<HogEnrichment> {
   const createResponse = await fetch(`${BASE_URL}/enrichments`, {
     method: 'POST',
     headers: { ...headers, 'content-type': 'application/json' },
-    body: JSON.stringify({ linkedin_url: linkedinUrl }),
+    body: JSON.stringify({
+      identifier: { linkedin_url: linkedinUrl },
+      fields: [
+        'contact.email',
+        'contact.phone',
+        'contact.title',
+        'contact.company',
+        'contact.name',
+        'contact.full_name',
+      ],
+    }),
   });
 
-  const created = await asJson<{ id?: string; enrichment_id?: string }>(
+  const created = await asJson<{ id?: string; enrichment_id?: string; operation_id?: string }>(
     createResponse,
     'hog enrichment create',
   );
-  const id = created.id ?? created.enrichment_id;
+  const id = created.id ?? created.enrichment_id ?? created.operation_id;
   if (!id) throw new Error('hog enrichment response missing id');
 
   const deadline = Date.now() + POLL_TIMEOUT_MS;
@@ -69,7 +79,7 @@ export async function enrich(linkedinUrl: string): Promise<HogEnrichment> {
       'hog enrichment poll',
     );
     const status = (poll.status ?? '').toLowerCase();
-    if (status === 'completed' || status === 'success' || status === 'done') {
+    if (status === 'completed' || status === 'success' || status === 'succeeded' || status === 'done') {
       return { id, status: poll.status ?? 'completed', result: poll.result, raw: poll };
     }
     if (status === 'failed' || status === 'error') {
@@ -119,7 +129,7 @@ export async function deepResearch(args: {
       'hog deep-research poll',
     );
     const status = (poll.status ?? '').toLowerCase();
-    if (status === 'completed' || status === 'success' || status === 'done') {
+    if (status === 'completed' || status === 'success' || status === 'succeeded' || status === 'done') {
       return { id, status: poll.status ?? 'completed', result: poll.result, raw: poll };
     }
     if (status === 'failed' || status === 'error') {
