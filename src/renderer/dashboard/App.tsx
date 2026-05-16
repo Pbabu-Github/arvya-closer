@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
-import { OutreachTestPanel } from './components/OutreachTestPanel';
 import { FindEventsPanel } from './components/FindEventsPanel';
 import { AskBrainPanel } from './components/AskBrainPanel';
 import { LearningReceipt } from './components/LearningReceipt';
+import { AccountQueue, type Prospect } from './components/AccountQueue';
+import { SelectedAccountDetail } from './components/SelectedAccountDetail';
 import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
@@ -99,6 +100,7 @@ export function Dashboard() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [view, setView] = useState<View>('home');
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
 
   // Animated count-up for Mission Scoreboard
   const animatedPages = useCountUp(pagesIndexed ?? 0, 1600);
@@ -236,18 +238,26 @@ export function Dashboard() {
               {view === 'home' ? (
                 <>
                   <div>
-                    <div className="hero__eyebrow">Today · Find your next demo</div>
-                    <h1 className="hero__title">
-                      The salesperson's second brain.
-                    </h1>
+                    <div className="hero__eyebrow">Today · prior conversations the brain remembers</div>
+                    <h1 className="hero__title">Pick up where you left off.</h1>
                     <div className="hero__subtitle">
-                      Paste a LinkedIn URL. Watch your brain do the rest.
+                      Every past call is loaded. Click an account to see what the brain knows and draft outreach.
                     </div>
                   </div>
 
                   <AskBrainPanel />
 
-                  <OutreachTestPanel />
+                  <div className="home-grid">
+                    <AccountQueue
+                      selectedSlug={selectedProspect?.slug ?? null}
+                      onSelect={setSelectedProspect}
+                    />
+                    {selectedProspect ? (
+                      <SelectedAccountDetail prospect={selectedProspect} />
+                    ) : (
+                      <div className="queue queue__empty">Select an account from the queue.</div>
+                    )}
+                  </div>
 
                   <button onClick={() => setView('autopsy')} className="autopsy-link">
                     <span>Run Demo Autopsy on 15 prior calls</span>

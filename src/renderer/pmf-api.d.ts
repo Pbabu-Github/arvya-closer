@@ -31,6 +31,17 @@ interface SeedProgress {
   kind: string;
 }
 
+interface ProspectRow {
+  slug: string;
+  name: string;
+  company: string;
+  title?: string;
+  linkedinUrl?: string;
+  lastCallIso: string;
+  status: 'hot' | 'stalled' | 'cold' | 'new';
+  signal: string;
+}
+
 interface PMFApi {
   openOverlay: () => Promise<{ ok: boolean }>;
   hideOverlay: () => Promise<{ ok: boolean }>;
@@ -65,6 +76,10 @@ interface PMFApi {
 
   coach: {
     nextCard: (context: unknown) => Promise<{ ok: boolean; card?: unknown; error?: string }>;
+  };
+
+  prospects: {
+    list: () => Promise<{ ok: boolean; prospects?: ProspectRow[]; error?: string }>;
   };
 
   brain: {

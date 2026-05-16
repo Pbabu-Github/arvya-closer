@@ -30,6 +30,9 @@ const api = {
   coach: {
     nextCard: (context: unknown) => ipcRenderer.invoke('pmf:coach:next-card', context),
   },
+  prospects: {
+    list: () => ipcRenderer.invoke('pmf:prospects:list'),
+  },
   brain: {
     seed: (extraPaths?: string[]) => ipcRenderer.invoke('pmf:brain:seed', extraPaths ?? []),
     stats: () => ipcRenderer.invoke('pmf:brain:stats'),
