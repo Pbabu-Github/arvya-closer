@@ -27,6 +27,20 @@ export type GBrainIdentity = {
   raw: unknown;
 };
 
+export type GBrainSearchChunk = {
+  slug?: string;
+  page_id?: number;
+  title?: string;
+  type?: string;
+  chunk_text?: string;
+  chunk_source?: string;
+  chunk_id?: number;
+  chunk_index?: number;
+  score?: number;
+  stale?: boolean;
+  source_id?: string;
+};
+
 let tokenCache: TokenCache | null = null;
 
 function loadDotEnv() {
@@ -148,6 +162,7 @@ async function mcpCall<T = unknown>(name: string, args: Record<string, unknown> 
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -157,24 +172,68 @@ async function mcpCall<T = unknown>(name: string, args: Record<string, unknown> 
     }),
   });
 
-  const json = await parseJsonResponse<JsonRpcResponse<T>>(response, `gbrain MCP ${name}`);
+  const json = await parseMcpResponse<JsonRpcResponse<T>>(response, `gbrain MCP ${name}`);
   if (json.error) {
     throw new Error(`gbrain MCP ${name} failed: ${json.error.message ?? JSON.stringify(json.error)}`);
   }
   return json.result as T;
 }
 
-function normalizeIdentity(raw: unknown): GBrainIdentity {
-  const source =
-    typeof raw === 'object' && raw && 'structuredContent' in raw
-      ? (raw as { structuredContent: unknown }).structuredContent
-      : raw;
+async function parseMcpResponse<T>(response: Response, label: string): Promise<T> {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`${label} failed (${response.status}): ${text.slice(0, 240)}`);
+  }
 
+  const trimmed = text.trim();
+  if (!trimmed) return {} as T;
+
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    return JSON.parse(trimmed) as T;
+  }
+
+  // SSE stream: take the last `data: <json>` line.
+  let payload: string | null = null;
+  for (const line of trimmed.split(/\r?\n/)) {
+    if (line.startsWith('data:')) payload = line.slice(5).trim();
+  }
+  if (!payload) {
+    throw new Error(`${label} returned no data frame: ${trimmed.slice(0, 240)}`);
+  }
+  return JSON.parse(payload) as T;
+}
+
+type McpToolCallResult = {
+  content?: Array<{ type?: string; text?: string }>;
+  structuredContent?: unknown;
+  isError?: boolean;
+};
+
+function extractStructured<T>(result: unknown): T {
+  if (result && typeof result === 'object' && 'structuredContent' in result) {
+    return (result as { structuredContent: T }).structuredContent;
+  }
+  const content = (result as McpToolCallResult)?.content;
+  const first = content?.[0]?.text;
+  if (typeof first === 'string') {
+    try {
+      return JSON.parse(first) as T;
+    } catch {
+      return first as unknown as T;
+    }
+  }
+  return result as T;
+}
+
+function normalizeIdentity(raw: unknown): GBrainIdentity {
+  const source = extractStructured<unknown>(raw);
   const record = typeof source === 'object' && source ? (source as Record<string, unknown>) : {};
   return {
     pages: numberFrom(record.pages ?? record.page_count ?? record.pageCount),
     chunks: numberFrom(record.chunks ?? record.chunk_count ?? record.chunkCount),
-    last_sync: stringFrom(record.last_sync ?? record.lastSync ?? record.last_synced_at),
+    last_sync: stringFrom(
+      record.last_sync ?? record.lastSync ?? record.last_synced_at ?? record.last_sync_iso,
+    ),
     entities: numberFrom(record.entities ?? record.entity_count ?? record.entityCount),
     raw,
   };
@@ -193,8 +252,18 @@ function stringFrom(value: unknown): string | undefined {
 }
 
 export const gbrainClient = {
-  query: (q: string) => mcpCall('query', { q }),
-  search: (q: string) => mcpCall('search', { q }),
+  async query(q: string, limit?: number): Promise<unknown> {
+    const args: Record<string, unknown> = { query: q };
+    if (typeof limit === 'number') args.limit = limit;
+    return extractStructured(await mcpCall('query', args));
+  },
+  async search(q: string, limit?: number): Promise<GBrainSearchChunk[]> {
+    const args: Record<string, unknown> = { query: q };
+    if (typeof limit === 'number') args.limit = limit;
+    const raw = await mcpCall('search', args);
+    const parsed = extractStructured<unknown>(raw);
+    return Array.isArray(parsed) ? (parsed as GBrainSearchChunk[]) : [];
+  },
   putPage: (slug: string, content: string) => mcpCall('put_page', { slug, content }),
   async getBrainIdentity() {
     return normalizeIdentity(await mcpCall('get_brain_identity'));
