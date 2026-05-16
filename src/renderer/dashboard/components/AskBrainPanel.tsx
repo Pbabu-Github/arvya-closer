@@ -46,38 +46,97 @@ export function AskBrainPanel() {
     setAskedQuestion(finalQ);
 
     try {
-      // Try the grounded `query` op first
-      const r = (await window.pmf.gbrain.query(finalQ)) as { ok: boolean; result?: unknown; error?: string };
-      if (!r.ok) {
-        setError(r.error ?? 'gbrain query failed');
+      // STEP 1 — strip stopwords so verbose questions tokenize into the
+      // keyword index. gbrain's search is FTS-based; "What are X in Y calls?"
+      // returns 0 hits but "X Y" returns real chunks.
+      const searchTerms = stripStopwords(finalQ);
+      const s = (await window.pmf.gbrain.search(searchTerms)) as { ok: boolean; result?: unknown; error?: string };
+      if (!s.ok) {
+        setError(s.error ?? 'gbrain search failed');
         return;
       }
 
-      const parsed = parseQueryResult(r.result);
-      if (parsed.answer) {
-        setAnswer(parsed.answer);
-        setCitations(parsed.citations);
-        return;
-      }
+      const hits = parseSearchHits(s.result, 6);
 
-      // Fallback: if query didn't return a grounded answer, do a raw search
-      const s = (await window.pmf.gbrain.search(finalQ)) as { ok: boolean; result?: unknown; error?: string };
-      if (s.ok) {
-        const hits = parseSearchHits(s.result, 5);
-        if (hits.length > 0) {
-          setAnswer(`Found ${hits.length} relevant snippets across the brain. See citations below.`);
-          setCitations(hits);
-          return;
+      if (hits.length === 0) {
+        // Try query as fallback (keyword-style)
+        try {
+          const q2 = (await window.pmf.gbrain.query(finalQ)) as { ok: boolean; result?: unknown };
+          const fallback = parseSearchHits(q2.result, 6);
+          if (fallback.length > 0) {
+            setCitations(fallback);
+            setAnswer(synthesizeFallback(finalQ, fallback));
+            return;
+          }
+        } catch {
+          /* ignore */
         }
+        setError('No relevant content found in the brain for this question. Try keyword-style ("DealCloud", "buyer tracker") or a more specific question.');
+        return;
       }
 
-      setError('No grounded answer found. Try a more specific question.');
+      // STEP 2 — render citations immediately so user sees brain hits
+      setCitations(hits);
+
+      // STEP 3 — synthesize a grounded prose answer via Anthropic Sonnet 4.6,
+      // grounding it in the retrieved chunks. This is proper RAG.
+      const context = hits
+        .map(
+          (h, i) =>
+            `[Source ${i + 1}] ${h.title ?? h.slug}\n${(h.chunk_text ?? '').slice(0, 600)}`,
+        )
+        .join('\n\n---\n\n');
+
+      const system =
+        'You are answering questions about Arvya (an AI execution platform for PE/IB deal teams, built into Outlook) using ONLY the provided source excerpts. ' +
+        'Be specific. Cite sources inline as [Source N]. If the sources do not contain the answer, say so plainly. ' +
+        'Max 4 short paragraphs. Lead with the most concrete fact.';
+
+      const user = `Sources from our brain:\n\n${context}\n\n---\n\nQuestion: ${finalQ}`;
+
+      const a = (await window.pmf.anthropic.chat(system, user)) as { ok: boolean; text?: string; error?: string };
+      if (a.ok && a.text) {
+        setAnswer(a.text);
+      } else {
+        setAnswer(synthesizeFallback(finalQ, hits));
+        if (a.error) console.warn('[ask-brain] anthropic failed, showed fallback:', a.error);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
   };
+
+  // If Anthropic is unreachable, build a non-LLM "answer" from the chunks so
+  // the user still gets value.
+  function synthesizeFallback(q: string, hits: Citation[]): string {
+    return `${hits.length} sources from our brain match "${q}". See citations below.`;
+  }
+
+  // Strip filler/question words so verbose questions tokenize cleanly for FTS.
+  // "What are Arvya buyer objections in PE/IB calls?" → "arvya buyer objections pe ib"
+  function stripStopwords(input: string): string {
+    const stopwords = new Set([
+      'a','an','the','is','are','was','were','be','been','being',
+      'what','why','when','where','who','whom','whose','how','which',
+      'do','does','did','can','could','should','would','may','might','must','will','shall',
+      'in','on','at','to','from','for','of','with','by','about','as','into','onto','over','under',
+      'our','your','their','its','his','her',
+      'me','you','we','they','them','i','us',
+      'tell','give','show','find','list','please',
+      'calls','call',
+      'and','or','but','if','then','than',
+      'this','that','these','those','some','any','all','no','not',
+    ]);
+    const cleaned = input
+      .toLowerCase()
+      .replace(/[^\w\s/-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w && !stopwords.has(w));
+    // Return at least 1 token even if all were stopwords
+    return (cleaned.length > 0 ? cleaned : input.toLowerCase().split(/\s+/)).join(' ');
+  }
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !loading) {
