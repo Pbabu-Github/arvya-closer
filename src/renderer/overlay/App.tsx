@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { PMFApi } from '../../../electron/preload';
-
-declare global {
-  interface Window {
-    pmf: PMFApi;
-  }
-}
+// window.pmf types live in src/renderer/pmf-api.d.ts
 
 type CoachCard = {
   type: 'say' | 'ask' | 'avoid' | 'show' | 'close';

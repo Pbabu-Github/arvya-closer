@@ -1,12 +1,6 @@
 import { useState } from 'react';
-import type { PMFApi } from '../../../electron/preload';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
-
-declare global {
-  interface Window {
-    pmf: PMFApi;
-  }
-}
+// window.pmf types live in src/renderer/pmf-api.d.ts
 
 export function Dashboard() {
   const [bookedToday, _setBookedToday] = useState(0);

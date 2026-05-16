@@ -13,13 +13,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import type { PMFApi } from '../../../../electron/preload';
-
-declare global {
-  interface Window {
-    pmf: PMFApi;
-  }
-}
+// window.pmf types live in src/renderer/pmf-api.d.ts
 
 const DEFAULT_SOURCES = [
   '~/Desktop/arvya-meeting-notes',

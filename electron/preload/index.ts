@@ -35,7 +35,9 @@ const api = {
       const listener = (_: unknown, payload: { file: string; current: number; total: number; kind: string }) =>
         cb(payload);
       ipcRenderer.on('pmf:brain:seed:progress', listener);
-      return () => ipcRenderer.removeListener('pmf:brain:seed:progress', listener);
+      return () => {
+        ipcRenderer.removeListener('pmf:brain:seed:progress', listener);
+      };
     },
   },
 };
