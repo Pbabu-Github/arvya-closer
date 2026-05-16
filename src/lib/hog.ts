@@ -5,9 +5,16 @@ export type HogEnrichment = {
   raw: unknown;
 };
 
+export type HogDeepResearch = {
+  id: string;
+  status: string;
+  result?: unknown;
+  raw: unknown;
+};
+
 const BASE_URL = 'https://developer.thehog.ai/api';
-const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 30_000;
+const POLL_INTERVAL_MS = 2500;
+const POLL_TIMEOUT_MS = 90_000;
 
 function authHeaders(): Record<string, string> {
   const accessKey = process.env.HOG_ACCESS_KEY;
@@ -71,4 +78,54 @@ export async function enrich(linkedinUrl: string): Promise<HogEnrichment> {
   }
 
   throw new Error(`hog enrichment ${id} timed out after ${POLL_TIMEOUT_MS}ms`);
+}
+
+/**
+ * Run a HOG /deep-research operation: prompt + JSON schema + optional source URLs.
+ * Returns the structured result. Polls /operations/:id until status is done.
+ *
+ * Example use: find PE/IB conferences in NY this quarter that target M&A advisors.
+ */
+export async function deepResearch(args: {
+  prompt: string;
+  schema: object;
+  urls?: string[];
+}): Promise<HogDeepResearch> {
+  const headers = authHeaders();
+
+  const createResponse = await fetch(`${BASE_URL}/deep-research`, {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      prompt: args.prompt,
+      schema: args.schema,
+      urls: args.urls ?? [],
+    }),
+  });
+
+  const created = await asJson<{ id?: string; operation_id?: string }>(
+    createResponse,
+    'hog deep-research create',
+  );
+  const id = created.id ?? created.operation_id;
+  if (!id) throw new Error('hog deep-research response missing id');
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    const pollResponse = await fetch(`${BASE_URL}/operations/${id}`, { headers });
+    const poll = await asJson<{ status?: string; result?: unknown }>(
+      pollResponse,
+      'hog deep-research poll',
+    );
+    const status = (poll.status ?? '').toLowerCase();
+    if (status === 'completed' || status === 'success' || status === 'done') {
+      return { id, status: poll.status ?? 'completed', result: poll.result, raw: poll };
+    }
+    if (status === 'failed' || status === 'error') {
+      throw new Error(`hog deep-research ${id} failed: ${JSON.stringify(poll).slice(0, 200)}`);
+    }
+  }
+
+  throw new Error(`hog deep-research ${id} timed out after ${POLL_TIMEOUT_MS}ms`);
 }

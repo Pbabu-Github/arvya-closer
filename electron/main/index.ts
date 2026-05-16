@@ -5,7 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { gbrainClient } from '../../src/lib/gbrain-client';
 import { chat as anthropicChat } from '../../src/lib/anthropic';
 import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
-import { enrich as hogEnrich } from '../../src/lib/hog';
+import { enrich as hogEnrich, deepResearch as hogDeepResearch } from '../../src/lib/hog';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -200,6 +200,18 @@ app.whenReady().then(() => {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
+
+  ipcMain.handle(
+    'pmf:hog:deep-research',
+    async (_, args: { prompt: string; schema: object; urls?: string[] }) => {
+      try {
+        const result = await hogDeepResearch(args);
+        return { ok: true, result };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
 
   ipcMain.handle('pmf:groq:transcribe', async (_, audioBytes: Uint8Array) => {
     const apiKey = process.env.GROQ_API_KEY;

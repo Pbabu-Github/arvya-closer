@@ -44,6 +44,8 @@ interface PMFApi {
 
   hog: {
     enrich: (linkedinUrl: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+    deepResearch: (args: { prompt: string; schema: object; urls?: string[] }) =>
+      Promise<{ ok: boolean; result?: unknown; error?: string }>;
   };
 
   groq: {
