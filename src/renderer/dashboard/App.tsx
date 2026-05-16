@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
-import { OutreachTestPanel } from './components/OutreachTestPanel';
 import { LearningReceipt } from './components/LearningReceipt';
+import { AccountQueue, type Prospect } from './components/AccountQueue';
+import { SelectedAccountDetail } from './components/SelectedAccountDetail';
 import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
@@ -14,6 +15,7 @@ export function Dashboard() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [view, setView] = useState<View>('detail');
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
 
   // Animated count-up for Mission Scoreboard
   const animatedPages = useCountUp(pagesIndexed ?? 0, 1600);
@@ -96,12 +98,18 @@ export function Dashboard() {
         ) : (
           <>
             <aside className="dashboard__rail-left">
-              <div className="rail__title">Account Queue</div>
-              <div className="rail__placeholder">Drop accounts here</div>
+              <AccountQueue
+                selectedSlug={selectedProspect?.slug ?? null}
+                onSelect={setSelectedProspect}
+              />
             </aside>
 
             <section className="dashboard__center">
-              <OutreachTestPanel />
+              {selectedProspect ? (
+                <SelectedAccountDetail prospect={selectedProspect} />
+              ) : (
+                <div className="rail__placeholder">Select an account from the queue to begin.</div>
+              )}
 
               <div className="center__autopsy-link">
                 <a href="#autopsy" onClick={openAutopsy}>

@@ -286,6 +286,223 @@ body, html, #root {
   margin-top: 8px;
 }
 
+/* ─── Account Queue (left rail) ────────────────────────────── */
+.account-queue__error {
+  font-size: 12px;
+  color: #ff6b6b;
+  padding: 8px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.account-queue__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.account-queue__row {
+  padding: 10px 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.account-queue__row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border);
+}
+.account-queue__row--active {
+  background: rgba(108, 99, 255, 0.10);
+  border-color: rgba(108, 99, 255, 0.35);
+}
+.account-queue__row--active:hover {
+  background: rgba(108, 99, 255, 0.14);
+}
+.account-queue__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.account-queue__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #777;
+  flex: 0 0 auto;
+}
+.account-queue__dot--hot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.65);
+}
+.account-queue__dot--stalled {
+  background: #f97316;
+}
+.account-queue__dot--cold {
+  background: #6b7280;
+}
+.account-queue__dot--new {
+  background: #6c63ff;
+}
+.account-queue__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-queue__when {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.account-queue__company {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.account-queue__signal {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.7;
+  line-height: 1.35;
+}
+
+/* ─── Selected Account Detail (center) ─────────────────────── */
+.selected-account {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.selected-account__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.selected-account__name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.selected-account__company {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+.selected-account__status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.selected-account__status--hot {
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+}
+.selected-account__status--stalled {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fb923c;
+}
+.selected-account__status--cold {
+  color: var(--text-dim);
+}
+.selected-account__signal {
+  font-size: 13px;
+  color: var(--text);
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent);
+  background: rgba(108, 99, 255, 0.06);
+  border-radius: 0 6px 6px 0;
+}
+.selected-account__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.selected-account__section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.selected-account__loading {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.selected-account__error {
+  font-size: 12px;
+  color: #ff6b6b;
+  padding: 8px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 6px;
+}
+.selected-account__snippets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.selected-account__snippets li {
+  font-size: 12px;
+  color: var(--text);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  line-height: 1.45;
+}
+.selected-account__enrich {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+  margin: 0;
+}
+.selected-account__enrich dt {
+  color: var(--text-dim);
+}
+.selected-account__enrich dd {
+  margin: 0;
+  color: var(--text);
+}
+.selected-account__draft {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.selected-account__draft-text {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-family: inherit;
+  margin: 0;
+}
+.selected-account__draft-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* ─── Learning Receipt ─────────────────────────────────────── */
 .receipt-backdrop {
   position: fixed;

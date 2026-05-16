@@ -6,6 +6,7 @@ import { gbrainClient } from '../../src/lib/gbrain-client';
 import { chat as anthropicChat } from '../../src/lib/anthropic';
 import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
 import { enrich as hogEnrich } from '../../src/lib/hog';
+import { listProspects } from '../../src/lib/prospects';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -285,6 +286,14 @@ app.whenReady().then(() => {
     // forward to dashboardWindow.webContents.send('pmf:brain:seed:progress', ...).
     // For now this is a stub so the UI button compiles.
     return { ok: false, error: 'pmf:brain:seed not yet implemented (see scripts/seed-brain.ts)' };
+  });
+
+  ipcMain.handle('pmf:prospects:list', () => {
+    try {
+      return { ok: true, prospects: listProspects() };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   ipcMain.handle('pmf:brain:stats', async () => {
