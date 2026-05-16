@@ -66,7 +66,9 @@ export function BrainSeedPanel() {
   useEffect(() => {
     if (!HAS_PMF) return;
     const unsub = window.pmf.brain.onProgress((p) => setProgress(p));
-    return () => unsub();
+    return () => {
+      unsub();
+    };
   }, []);
 
   const onSeed = async () => {

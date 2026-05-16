@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Animate a number from 0 → `target` with an ease-out cubic curve.
+ * Animate a number from current → `target` with an ease-out cubic curve.
  *
  * @param target - The final value to count up to.
  * @param durationMs - Animation duration in ms. Defaults to 800.
