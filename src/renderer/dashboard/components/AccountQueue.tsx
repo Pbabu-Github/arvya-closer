@@ -2,6 +2,8 @@
  * AccountQueue — populates the dashboard left rail with real prospects from past
  * meeting notes. Each row: name, last-touch date, status dot, signal one-liner.
  * Click a row to make it the active account; parent owns selection state.
+ *
+ * Styling uses the editorial design tokens from dashboard.css v2 (cream/blue).
  */
 
 import { useEffect, useState } from 'react';
@@ -45,7 +47,6 @@ export function AccountQueue({ selectedSlug, onSelect }: Props) {
         if (cancelled) return;
         if (r.ok && r.prospects) {
           setProspects(r.prospects);
-          // Auto-select first prospect so the center pane is never empty
           if (r.prospects.length > 0 && !selectedSlug) {
             onSelect(r.prospects[0]);
           }
@@ -59,37 +60,41 @@ export function AccountQueue({ selectedSlug, onSelect }: Props) {
     return () => {
       cancelled = true;
     };
-    // intentionally exclude selectedSlug/onSelect so auto-select fires once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div className="account-queue">
-      <div className="rail__title">Account Queue · {prospects.length}</div>
+      <div className="account-queue__head">
+        <span className="account-queue__eyebrow">Account queue</span>
+        <span className="account-queue__count">{prospects.length}</span>
+      </div>
 
       {error && <div className="account-queue__error">⚠️ {error}</div>}
 
       {prospects.length === 0 && !error && (
-        <div className="rail__placeholder">Loading prior conversations…</div>
+        <div className="queue queue__empty">Loading prior conversations…</div>
       )}
 
-      <ul className="account-queue__list">
-        {prospects.map((p) => (
-          <li
-            key={p.slug}
-            className={`account-queue__row ${selectedSlug === p.slug ? 'account-queue__row--active' : ''}`}
-            onClick={() => onSelect(p)}
-          >
-            <div className="account-queue__head">
-              <span className={`account-queue__dot account-queue__dot--${p.status}`} />
-              <span className="account-queue__name">{p.name}</span>
-              <span className="account-queue__when">{relativeDays(p.lastCallIso)}</span>
-            </div>
-            <div className="account-queue__company">{p.company}</div>
-            <div className="account-queue__signal">{p.signal}</div>
-          </li>
-        ))}
-      </ul>
+      {prospects.length > 0 && (
+        <ul className="account-queue__list">
+          {prospects.map((p) => (
+            <li
+              key={p.slug}
+              className={`account-row ${selectedSlug === p.slug ? 'account-row--active' : ''}`}
+              onClick={() => onSelect(p)}
+            >
+              <div className="account-row__top">
+                <span className={`account-row__dot account-row__dot--${p.status}`} />
+                <span className="account-row__name">{p.name}</span>
+                <span className="account-row__when">{relativeDays(p.lastCallIso)}</span>
+              </div>
+              <div className="account-row__company">{p.company}</div>
+              <div className="account-row__signal">{p.signal}</div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

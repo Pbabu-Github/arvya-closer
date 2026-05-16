@@ -13,6 +13,8 @@ const api = {
   },
   hog: {
     enrich: (linkedinUrl: string) => ipcRenderer.invoke('pmf:hog:enrich', linkedinUrl),
+    deepResearch: (args: { prompt: string; schema: object; urls?: string[] }) =>
+      ipcRenderer.invoke('pmf:hog:deep-research', args),
   },
   groq: {
     transcribe: (audioBytes: Uint8Array) =>

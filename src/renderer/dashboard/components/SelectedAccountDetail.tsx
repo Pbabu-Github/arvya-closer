@@ -1,11 +1,10 @@
 /**
- * SelectedAccountDetail — replaces OutreachTestPanel as the dashboard center pane.
- * Takes a Prospect prop, auto-fetches brain context + (optional) HOG enrichment,
- * surfaces "Draft outreach DM" grounded in the brain snippets.
+ * SelectedAccountDetail — replaces the LinkedIn-URL paste flow as the home view's
+ * action surface. Takes a Prospect prop, auto-fetches brain context + (optional)
+ * HOG enrichment, surfaces "Draft outreach DM" grounded in the brain snippets.
  *
  * No URL input — the prospect was selected from the Account Queue, so we know who
- * they are. Manual paste lives behind a tiny "+ Add prospect" affordance handled
- * separately by the parent.
+ * they are.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -102,7 +101,6 @@ export function SelectedAccountDetail({ prospect }: Props) {
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
 
-  // Reset everything and refetch whenever the selected prospect changes
   const lastSlugRef = useRef<string | null>(null);
   useEffect(() => {
     if (lastSlugRef.current === prospect.slug) return;
@@ -117,7 +115,6 @@ export function SelectedAccountDetail({ prospect }: Props) {
 
     if (typeof window === 'undefined' || !window.pmf) return;
 
-    // Brain context — always
     setBrainLoading(true);
     window.pmf.gbrain
       .search(`${prospect.name} ${prospect.company}`)
@@ -131,7 +128,6 @@ export function SelectedAccountDetail({ prospect }: Props) {
       .catch((e) => setBrainError(String(e)))
       .finally(() => setBrainLoading(false));
 
-    // HOG enrichment — only if we have a LinkedIn URL
     if (prospect.linkedinUrl) {
       window.pmf.hog
         .enrich(prospect.linkedinUrl)
@@ -171,28 +167,28 @@ export function SelectedAccountDetail({ prospect }: Props) {
   const enrichmentEmail = pickString(enrichment ?? undefined, ['email']);
 
   return (
-    <div className="selected-account">
-      <header className="selected-account__head">
+    <div className="account-detail card">
+      <header className="account-detail__head">
         <div>
-          <div className="selected-account__name">{prospect.name}</div>
-          <div className="selected-account__company">{prospect.company}</div>
+          <div className="account-detail__name">{prospect.name}</div>
+          <div className="account-detail__company">{prospect.company}</div>
         </div>
-        <span className={`selected-account__status selected-account__status--${prospect.status}`}>
+        <span className={`account-detail__status account-detail__status--${prospect.status}`}>
           {prospect.status.toUpperCase()}
         </span>
       </header>
 
-      <div className="selected-account__signal">{prospect.signal}</div>
+      <div className="account-detail__signal">{prospect.signal}</div>
 
-      <section className="selected-account__section">
-        <div className="selected-account__section-title">Brain context · past calls</div>
-        {brainLoading && <div className="selected-account__loading">Querying gbrain…</div>}
-        {brainError && <div className="selected-account__error">⚠️ gbrain: {brainError}</div>}
+      <section className="account-detail__section">
+        <div className="account-detail__section-title">Brain context · past calls</div>
+        {brainLoading && <div className="account-detail__loading">Querying gbrain…</div>}
+        {brainError && <div className="account-detail__error">⚠️ gbrain: {brainError}</div>}
         {!brainLoading && !brainError && brainSnippets.length === 0 && (
-          <div className="selected-account__loading">No prior snippets found.</div>
+          <div className="account-detail__loading">No prior snippets found.</div>
         )}
         {brainSnippets.length > 0 && (
-          <ul className="selected-account__snippets">
+          <ul className="account-detail__snippets">
             {brainSnippets.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
@@ -201,11 +197,11 @@ export function SelectedAccountDetail({ prospect }: Props) {
       </section>
 
       {(prospect.linkedinUrl || enrichment) && (
-        <section className="selected-account__section">
-          <div className="selected-account__section-title">HOG enrichment</div>
-          {enrichError && <div className="selected-account__error">⚠️ HOG: {enrichError}</div>}
+        <section className="account-detail__section">
+          <div className="account-detail__section-title">HOG enrichment</div>
+          {enrichError && <div className="account-detail__error">⚠️ HOG: {enrichError}</div>}
           {enrichment && (
-            <dl className="selected-account__enrich">
+            <dl className="account-detail__enrich">
               <dt>Name</dt><dd>{enrichmentName ?? '—'}</dd>
               <dt>Title</dt><dd>{enrichmentTitle ?? '—'}</dd>
               <dt>Company</dt><dd>{enrichmentCompany ?? '—'}</dd>
@@ -215,22 +211,22 @@ export function SelectedAccountDetail({ prospect }: Props) {
         </section>
       )}
 
-      <section className="selected-account__section">
+      <section className="account-detail__section">
         <button onClick={onDraft} disabled={draftLoading} className="btn btn--primary">
           {draftLoading ? 'Drafting via Claude Sonnet…' : 'Draft outreach DM'}
         </button>
 
-        {draftError && <div className="selected-account__error">⚠️ Anthropic: {draftError}</div>}
+        {draftError && <div className="account-detail__error">⚠️ Anthropic: {draftError}</div>}
 
         {draftText && (
-          <div className="selected-account__draft">
-            <div className="selected-account__section-title">Draft (grounded in brain context)</div>
-            <pre className="selected-account__draft-text">{draftText}</pre>
-            <div className="selected-account__draft-actions">
-              <button onClick={() => navigator.clipboard?.writeText(draftText)} className="btn btn--ghost">
+          <div className="account-detail__draft">
+            <div className="account-detail__section-title">Draft (grounded in brain context)</div>
+            <pre className="account-detail__draft-text">{draftText}</pre>
+            <div className="account-detail__draft-actions">
+              <button onClick={() => navigator.clipboard?.writeText(draftText)} className="btn btn--sm">
                 Copy
               </button>
-              <button onClick={onDraft} className="btn btn--ghost">
+              <button onClick={onDraft} className="btn btn--sm btn--ghost">
                 Regenerate
               </button>
             </div>
