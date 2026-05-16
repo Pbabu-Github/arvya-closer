@@ -498,3 +498,47 @@ body, html, #root {
     opacity: 1;
   }
 }
+
+.autopsy__lanes--wedged .autopsy__lane {
+  transition: opacity 280ms ease-out;
+}
+.autopsy__lanes--wedged .autopsy__lane:not(.autopsy__lane--wedge) {
+  opacity: 0.45;
+}
+
+.autopsy__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 90, 95, 0.08);
+  border: 1px solid rgba(255, 90, 95, 0.4);
+  border-radius: 8px;
+  animation: autopsy-summary-in 420ms ease-out 60ms backwards;
+}
+
+.autopsy__summary-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.autopsy__summary-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@keyframes autopsy-summary-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -103,7 +103,7 @@ export function DemoAutopsyPanel({ onClose }: Props) {
 
         <div className="autopsy__lanes-wrap">
           <div className="autopsy__section-label">Pattern frequency</div>
-          <div className="autopsy__lanes">
+          <div className={`autopsy__lanes ${showWedges ? 'autopsy__lanes--wedged' : ''}`}>
             {LANES.map((lane) => (
               <LaneRow
                 key={`${lane.id}-${runKey}`}
@@ -113,10 +113,22 @@ export function DemoAutopsyPanel({ onClose }: Props) {
               />
             ))}
           </div>
+          {showWedges && (
+            <div className="autopsy__summary">
+              <span className="autopsy__summary-label">Wedge identified</span>
+              <span className="autopsy__summary-value">
+                {wedgeLanes().map((l) => l.label).join(' × ')} — {wedgeLanes().reduce((s, l) => s + l.count, 0)} pain mentions across {TOTAL} calls
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function wedgeLanes(): Lane[] {
+  return LANES.filter((l) => l.count >= l.threshold);
 }
 
 interface TranscriptGridProps {
@@ -159,7 +171,7 @@ function LaneRow({ lane, running, showWedge }: LaneRowProps) {
   const isWedge = lane.count >= lane.threshold;
 
   return (
-    <div className="autopsy__lane">
+    <div className={`autopsy__lane ${isWedge ? 'autopsy__lane--wedge' : ''}`}>
       <div className="autopsy__lane-header">
         <span className="autopsy__lane-label">{lane.label}</span>
         <span className="autopsy__lane-count">
