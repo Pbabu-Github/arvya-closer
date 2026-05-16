@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { gbrainClient } from '../../src/lib/gbrain-client';
+import { chat as anthropicChat } from '../../src/lib/anthropic';
+import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
+import { enrich as hogEnrich } from '../../src/lib/hog';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -189,19 +192,49 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('pmf:hog:enrich', async (_, _linkedinUrl: string) => {
-    // TODO(Naveen — lane/api)
-    return { ok: false, error: 'pmf:hog:enrich not yet implemented' };
+  ipcMain.handle('pmf:hog:enrich', async (_, linkedinUrl: string) => {
+    try {
+      return { ok: true, result: await hogEnrich(linkedinUrl) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
-  ipcMain.handle('pmf:groq:transcribe', async (_, _audioBytes: Uint8Array) => {
-    // TODO(Naveen — lane/api)
-    return { ok: false, error: 'pmf:groq:transcribe not yet implemented' };
+  ipcMain.handle('pmf:groq:transcribe', async (_, audioBytes: Uint8Array) => {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) return { ok: false, error: 'GROQ_API_KEY missing from env' };
+    try {
+      const form = new FormData();
+      const copy = new Uint8Array(audioBytes.byteLength);
+      copy.set(audioBytes);
+      const blob = new Blob([copy.buffer as ArrayBuffer], { type: 'audio/m4a' });
+      form.append('file', blob, 'audio.m4a');
+      form.append('model', 'whisper-large-v3');
+      form.append('response_format', 'text');
+
+      const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        return { ok: false, error: `groq ${response.status}: ${text.slice(0, 200)}` };
+      }
+      return { ok: true, text };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
-  ipcMain.handle('pmf:anthropic:chat', async (_, _system: string, _user: string) => {
-    // TODO(Naveen — lane/api)
-    return { ok: false, error: 'pmf:anthropic:chat not yet implemented' };
+  ipcMain.handle('pmf:anthropic:chat', async (_, system: string, user: string) => {
+    try {
+      const text = await anthropicChat({ system, user });
+      return { ok: true, text };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   ipcMain.handle('pmf:autopsy:load-cached', () => {
@@ -209,9 +242,22 @@ app.whenReady().then(() => {
     return { ok: false, error: 'pmf:autopsy:load-cached not yet implemented' };
   });
 
-  ipcMain.handle('pmf:coach:next-card', async (_, _context: unknown) => {
-    // TODO(Naveen — lane/api): hybrid rules + Anthropic tool-call
-    return { ok: false, error: 'pmf:coach:next-card not yet implemented' };
+  ipcMain.handle('pmf:coach:next-card', async (_, context: unknown) => {
+    try {
+      const ctx: CoachContext = {
+        lastTurns: Array.isArray((context as CoachContext | undefined)?.lastTurns)
+          ? ((context as CoachContext).lastTurns.filter((t) => typeof t === 'string') as string[])
+          : [],
+        callStage:
+          typeof (context as CoachContext | undefined)?.callStage === 'string'
+            ? (context as CoachContext).callStage
+            : undefined,
+      };
+      const card = await nextCard(ctx);
+      return { ok: true, card };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   // ------------------------------------------------------------
