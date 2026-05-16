@@ -30,3 +30,6 @@ recordings/
 *.transcript.json
 *.transcript.txt
 arvya-brain-seed/
+
+# Local scratch — manual hook test harness, not for commit
+scratch/
