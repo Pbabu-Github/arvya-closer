@@ -1,0 +1,5 @@
+{"skill":"plan-ceo-review","timestamp":"2026-05-16T20:16:58","status":"clean","unresolved":4,"critical_gaps":0,"mode":"SCOPE_EXPANSION","scope_proposed":8,"scope_accepted":6,"scope_deferred":6,"commit":"d4a2cbf"}
+{"skill":"plan-eng-review","timestamp":"2026-05-16T20:44:10Z","status":"issues_open","unresolved":2,"critical_gaps":3,"issues_found":14,"mode":"FULL_REVIEW","via":"autoplan","commit":"d4a2cbf"}
+{"skill":"plan-design-review","timestamp":"2026-05-16T20:44:10Z","status":"issues_open","unresolved":0,"via":"autoplan","commit":"d4a2cbf"}
+{"skill":"autoplan-voices","timestamp":"2026-05-16T20:44:10Z","status":"clean","source":"subagent-only","phase":"design","via":"autoplan","consensus_confirmed":0,"consensus_disagree":0,"commit":"d4a2cbf"}
+{"skill":"autoplan-voices","timestamp":"2026-05-16T20:44:10Z","status":"clean","source":"subagent-only","phase":"eng","via":"autoplan","consensus_confirmed":0,"consensus_disagree":0,"commit":"d4a2cbf"}
