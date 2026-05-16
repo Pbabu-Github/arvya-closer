@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import { gbrainClient } from '../../src/lib/gbrain-client';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -164,19 +165,28 @@ app.whenReady().then(() => {
     return { ok: true, ignore };
   });
 
-  ipcMain.handle('pmf:gbrain:query', async (_, _question: string) => {
-    // TODO(Naveen — lane/brain): wire to gbrain MCP via OAuth client_credentials
-    return { ok: false, error: 'pmf:gbrain:query not yet implemented' };
+  ipcMain.handle('pmf:gbrain:query', async (_, question: string) => {
+    try {
+      return { ok: true, result: await gbrainClient.query(question) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
-  ipcMain.handle('pmf:gbrain:search', async (_, _q: string) => {
-    // TODO(Naveen — lane/brain)
-    return { ok: false, error: 'pmf:gbrain:search not yet implemented' };
+  ipcMain.handle('pmf:gbrain:search', async (_, q: string) => {
+    try {
+      return { ok: true, result: await gbrainClient.search(q) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
-  ipcMain.handle('pmf:gbrain:put-page', async (_, _slug: string, _content: string) => {
-    // TODO(Naveen — lane/brain)
-    return { ok: false, error: 'pmf:gbrain:put-page not yet implemented' };
+  ipcMain.handle('pmf:gbrain:put-page', async (_, slug: string, content: string) => {
+    try {
+      return { ok: true, result: await gbrainClient.putPage(slug, content) };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   ipcMain.handle('pmf:hog:enrich', async (_, _linkedinUrl: string) => {
@@ -217,9 +227,12 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('pmf:brain:stats', async () => {
-    // TODO(Naveen — lane/brain): call gbrain MCP get_brain_identity and return
-    // { pages, chunks, last_sync, entities }
-    return { ok: false, error: 'pmf:brain:stats not yet implemented' };
+    try {
+      const stats = await gbrainClient.getBrainIdentity();
+      return { ok: true, ...stats };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   createDashboardWindow();
