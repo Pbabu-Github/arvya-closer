@@ -2,8 +2,29 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
+// Dev-mode diagnostics: remote-debugging port so we can connect via CDP
+if (is.dev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 let dashboardWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
+
+function attachRendererDiagnostics(win: BrowserWindow, name: string) {
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    const levelName = ['LOG', 'WARN', 'ERROR', 'DEBUG'][level] || `L${level}`;
+    console.log(`[${name} ${levelName}] ${message} (${sourceId}:${line})`);
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error(`[${name} LOAD FAIL] ${code} ${desc} url=${url}`);
+  });
+  win.webContents.on('render-process-gone', (_e, details) => {
+    console.error(`[${name} CRASH] ${JSON.stringify(details)}`);
+  });
+  win.webContents.on('preload-error', (_e, preloadPath, err) => {
+    console.error(`[${name} PRELOAD ERROR] ${preloadPath} ${err.stack ?? err.message}`);
+  });
+}
 
 function createDashboardWindow() {
   dashboardWindow = new BrowserWindow({
@@ -16,18 +37,26 @@ function createDashboardWindow() {
     title: 'Arvya Closer',
     backgroundColor: '#0a0a0f',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  dashboardWindow.on('ready-to-show', () => dashboardWindow?.show());
+  dashboardWindow.on('ready-to-show', () => {
+    dashboardWindow?.show();
+    dashboardWindow?.focus();
+    if (is.dev) {
+      dashboardWindow?.webContents.openDevTools({ mode: 'right' });
+    }
+  });
   dashboardWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: 'deny' };
   });
+
+  attachRendererDiagnostics(dashboardWindow, 'dashboard');
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     dashboardWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}/dashboard.html`);
@@ -68,7 +97,7 @@ function createOverlayWindow() {
     title: 'Arvya Closer Overlay',
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,

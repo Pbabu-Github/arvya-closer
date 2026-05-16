@@ -15,6 +15,10 @@
 import { useEffect, useState } from 'react';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
+// Defensive: if the preload script failed to load, window.pmf is undefined.
+// Don't crash — show a clear error in the panel instead.
+const HAS_PMF = typeof window !== 'undefined' && typeof window.pmf !== 'undefined';
+
 const DEFAULT_SOURCES = [
   '~/Desktop/arvya-meeting-notes',
   '~/Desktop/Union square advisors | arvya.txt',
@@ -36,12 +40,13 @@ export function BrainSeedPanel() {
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Poll stats every 5s while the panel is mounted
+  // Poll stats every 5s while the panel is mounted (only if preload loaded)
   useEffect(() => {
+    if (!HAS_PMF) return;
     let cancelled = false;
     const fetchStats = async () => {
       try {
-        const r = (await window.pmf.brain.stats()) as { ok: boolean; pages?: number; chunks?: number; last_sync?: string; entities?: number; error?: string };
+        const r = await window.pmf.brain.stats();
         if (!cancelled && r.ok) {
           setStats({ pages: r.pages ?? 0, chunks: r.chunks ?? 0, last_sync: r.last_sync ?? null, entities: r.entities ?? 0 });
         }
@@ -57,17 +62,22 @@ export function BrainSeedPanel() {
     };
   }, []);
 
-  // Subscribe to progress events
+  // Subscribe to progress events (only if preload loaded)
   useEffect(() => {
+    if (!HAS_PMF) return;
     const unsub = window.pmf.brain.onProgress((p) => setProgress(p));
     return () => unsub();
   }, []);
 
   const onSeed = async () => {
+    if (!HAS_PMF) {
+      setError('preload not loaded — restart bun run dev');
+      return;
+    }
     setSeeding(true);
     setError(null);
     try {
-      const r = (await window.pmf.brain.seed(extraPaths)) as { ok: boolean; error?: string };
+      const r = await window.pmf.brain.seed(extraPaths);
       if (!r.ok) setError(r.error ?? 'unknown error');
     } catch (e) {
       setError(String(e));
