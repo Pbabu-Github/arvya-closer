@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 let cachedClient: Anthropic | null = null;
 

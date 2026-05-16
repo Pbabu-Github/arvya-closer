@@ -11,7 +11,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const ANTHROPIC_MODEL = 'claude-3-5-sonnet-20241022';
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
 export type LearningReceiptOutcome =
   | 'drafted'

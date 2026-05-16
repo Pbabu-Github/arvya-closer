@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
+import { OutreachTestPanel } from './components/OutreachTestPanel';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
 type View = 'detail' | 'autopsy';
@@ -67,11 +68,7 @@ export function Dashboard() {
             </aside>
 
             <section className="dashboard__center">
-              <div className="center__title">Selected Account</div>
-              {/* TODO(Prashanth — lane/dash): AccountDetail, ProofRoom, OutreachApproval */}
-              <div className="center__placeholder">
-                Click an account on the left to see the proof room, outreach draft, and call prep.
-              </div>
+              <OutreachTestPanel />
 
               <div className="center__autopsy-link">
                 <a href="#autopsy" onClick={openAutopsy}>

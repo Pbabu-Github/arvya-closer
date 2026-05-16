@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { gbrainClient } from '../src/lib/gbrain-client';
 import type { GBrainSearchChunk } from '../src/lib/gbrain-client';
 
-const ANTHROPIC_MODEL = 'claude-3-5-sonnet-20241022';
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const OUTPUT_PATH = join(process.cwd(), 'data', 'demo-autopsy-result.json');
 
 const PATTERNS: Record<string, string[]> = {
