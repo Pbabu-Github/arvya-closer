@@ -9,7 +9,7 @@ import { SelectedAccountDetail } from './components/SelectedAccountDetail';
 import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
-type View = 'home' | 'autopsy' | 'events';
+type View = 'home' | 'autopsy' | 'events' | 'sources';
 
 // ─────────────────────────────────────────────────────────────
 // Inline SVG primitives (matches the design-kit Icon / wordmark)
@@ -226,6 +226,16 @@ export function Dashboard() {
 
               <div className="sidebar__spacer" />
 
+              <div className="sidebar__section">Setup</div>
+              <button
+                className={`nav-item ${view === 'sources' ? 'nav-item--active' : ''}`}
+                onClick={() => setView('sources')}
+              >
+                <span className="nav-item__icon"><Icon name="brain" /></span>
+                <span className="nav-item__label">Brain sources</span>
+                <span className="nav-item__count">{pagesIndexed ?? '—'}</span>
+              </button>
+
               <div className="sidebar__section">Status</div>
               <div className="nav-item" style={{ cursor: 'default' }}>
                 <span className="nav-item__icon"><span className="dot dot--ok" /></span>
@@ -266,13 +276,21 @@ export function Dashboard() {
                 </>
               ) : view === 'events' ? (
                 <FindEventsPanel />
+              ) : view === 'sources' ? (
+                <>
+                  <div>
+                    <div className="hero__eyebrow">Setup · brain sources</div>
+                    <h1 className="hero__title">What the brain reads.</h1>
+                    <div className="hero__subtitle">
+                      Local files, transcripts, and decks Arvya pulls into GBrain. Edit, add, re-seed.
+                    </div>
+                  </div>
+                  <div className="sources-wrap">
+                    <BrainSeedPanel />
+                  </div>
+                </>
               ) : null}
             </section>
-
-            {/* RIGHT RAIL */}
-            <aside className="rail-right">
-              <BrainSeedPanel />
-            </aside>
           </>
         )}
       </main>

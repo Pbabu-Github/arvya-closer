@@ -248,7 +248,7 @@ html, body, #root {
 
 .dashboard__main {
   display: grid;
-  grid-template-columns: 220px 1fr 320px;
+  grid-template-columns: 220px 1fr;
   overflow: hidden;
   min-height: 0;
 }
@@ -256,8 +256,18 @@ html, body, #root {
 .dashboard__main--autopsy {
   grid-template-columns: 1fr;
 }
-.dashboard__main--autopsy .sidebar,
-.dashboard__main--autopsy .rail-right { display: none; }
+.dashboard__main--autopsy .sidebar { display: none; }
+
+/* Brain-sources view: center the seed panel in a comfortable column */
+.sources-wrap {
+  max-width: 640px;
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--border-0);
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: var(--shadow-sm);
+}
 
 /* ---- Sidebar ---- */
 .sidebar {
@@ -626,15 +636,8 @@ html, body, #root {
 }
 
 /* =============================================================
-   RIGHT RAIL — BRAIN SEED PANEL
+   BRAIN SEED PANEL (sources view)
    ============================================================= */
-.rail-right {
-  border-left: 1px solid var(--border-0);
-  background: var(--bg-0);
-  padding: 24px 20px;
-  overflow-y: auto;
-}
-
 .brain-seed-panel {
   display: flex;
   flex-direction: column;

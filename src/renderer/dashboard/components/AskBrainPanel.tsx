@@ -195,14 +195,47 @@ function trim(s: string, max: number): string {
   return cleaned.length > max ? cleaned.slice(0, max - 1) + '…' : cleaned;
 }
 
-function unwrapMcpText(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  if ('content' in r && Array.isArray(r.content)) {
-    const first = (r.content as Array<{ type?: string; text?: string }>)[0];
-    if (first && typeof first.text === 'string') return first.text;
+/**
+ * Tolerant deep unwrap. The IPC result might be:
+ *   - already-parsed (string, array, object)  ← current gbrain-client.ts shape
+ *   - raw MCP envelope { content: [{text}] }  ← old shape, just in case
+ *   - nested { result: <above> }
+ */
+function unwrap(raw: unknown): unknown {
+  let cur: unknown = raw;
+  for (let i = 0; i < 4; i++) {
+    if (!cur) return cur;
+    // Raw MCP wrapper → unwrap to inner text (and try to JSON.parse it)
+    if (typeof cur === 'object' && 'content' in (cur as object)) {
+      const c = (cur as { content?: Array<{ text?: string }> }).content;
+      if (Array.isArray(c) && typeof c[0]?.text === 'string') {
+        try { cur = JSON.parse(c[0].text); } catch { cur = c[0].text; }
+        continue;
+      }
+    }
+    // structuredContent wrapper
+    if (typeof cur === 'object' && 'structuredContent' in (cur as object)) {
+      cur = (cur as { structuredContent: unknown }).structuredContent;
+      continue;
+    }
+    // Generic { result: ... } wrapper
+    if (typeof cur === 'object' && 'result' in (cur as object) && Object.keys(cur as object).length <= 3) {
+      cur = (cur as { result: unknown }).result;
+      continue;
+    }
+    return cur;
   }
-  return null;
+  return cur;
+}
+
+function coerceCitations(raw: unknown, max: number): Citation[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, max).map((c: Record<string, unknown>) => ({
+    slug: String(c.slug ?? ''),
+    title: typeof c.title === 'string' ? c.title : undefined,
+    chunk_text: typeof c.chunk_text === 'string' ? c.chunk_text : undefined,
+    score: typeof c.score === 'number' ? c.score : undefined,
+  }));
 }
 
 type ParsedQuery = {
@@ -211,59 +244,42 @@ type ParsedQuery = {
 };
 
 function parseQueryResult(raw: unknown): ParsedQuery {
-  const text = unwrapMcpText(raw);
-  if (!text) return { answer: null, citations: [] };
+  const v = unwrap(raw);
+  if (!v) return { answer: null, citations: [] };
 
-  // Sometimes `query` returns a JSON object with {answer, citations}
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === 'object') {
-      if (typeof parsed.answer === 'string') {
-        const citations = Array.isArray(parsed.citations)
-          ? (parsed.citations as Array<Record<string, unknown>>).map((c) => ({
-              slug: String(c.slug ?? c.page_slug ?? ''),
-              title: typeof c.title === 'string' ? c.title : undefined,
-              chunk_text: typeof c.chunk_text === 'string' ? c.chunk_text : undefined,
-              score: typeof c.score === 'number' ? c.score : undefined,
-            }))
-          : [];
-        return { answer: parsed.answer, citations };
-      }
-      // Some gbrain shapes return a raw array — treat as search hits
-      if (Array.isArray(parsed)) {
-        return {
-          answer: `Brain returned ${parsed.length} relevant chunks (no synthesized answer).`,
-          citations: parsed.slice(0, 5).map((c: Record<string, unknown>) => ({
-            slug: String(c.slug ?? ''),
-            title: typeof c.title === 'string' ? c.title : undefined,
-            chunk_text: typeof c.chunk_text === 'string' ? c.chunk_text : undefined,
-            score: typeof c.score === 'number' ? c.score : undefined,
-          })),
-        };
-      }
-    }
-  } catch {
-    // Not JSON — treat as plain prose answer
+  // 1) Plain string → grounded prose answer
+  if (typeof v === 'string') {
+    return { answer: v, citations: [] };
   }
 
-  return { answer: text, citations: [] };
+  // 2) Object with .answer / .text + optional .citations
+  if (typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    if (typeof o.answer === 'string') {
+      return { answer: o.answer, citations: coerceCitations(o.citations, 5) };
+    }
+    if (typeof o.text === 'string') {
+      return { answer: o.text, citations: coerceCitations(o.citations, 5) };
+    }
+  }
+
+  // 3) Array of search chunks
+  if (Array.isArray(v)) {
+    const cits = coerceCitations(v, 5);
+    return {
+      answer: cits.length > 0
+        ? `Brain returned ${cits.length} relevant chunks. See citations below.`
+        : null,
+      citations: cits,
+    };
+  }
+
+  // 4) Last resort — stringify
+  return { answer: JSON.stringify(v).slice(0, 600), citations: [] };
 }
 
 function parseSearchHits(raw: unknown, max: number): Citation[] {
-  const text = unwrapMcpText(raw);
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      return parsed.slice(0, max).map((c: Record<string, unknown>) => ({
-        slug: String(c.slug ?? ''),
-        title: typeof c.title === 'string' ? c.title : undefined,
-        chunk_text: typeof c.chunk_text === 'string' ? c.chunk_text : undefined,
-        score: typeof c.score === 'number' ? c.score : undefined,
-      }));
-    }
-  } catch {
-    // ignore
-  }
+  const v = unwrap(raw);
+  if (Array.isArray(v)) return coerceCitations(v, max);
   return [];
 }
