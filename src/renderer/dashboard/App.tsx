@@ -1,16 +1,41 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
 import { OutreachTestPanel } from './components/OutreachTestPanel';
+import { LearningReceipt } from './components/LearningReceipt';
+import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
 type View = 'detail' | 'autopsy';
 
 export function Dashboard() {
   const [bookedToday, _setBookedToday] = useState(0);
-  const [pagesIndexed, _setPagesIndexed] = useState<number | null>(null);
+  const [pagesIndexed, setPagesIndexed] = useState<number | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [view, setView] = useState<View>('detail');
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
+  // Animated count-up for Mission Scoreboard
+  const animatedPages = useCountUp(pagesIndexed ?? 0, 1600);
+
+  // Pull real stats from gbrain on mount
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.pmf) return;
+    let cancelled = false;
+    window.pmf.brain
+      .stats()
+      .then((r) => {
+        if (!cancelled && r.ok && typeof r.pages === 'number') {
+          setPagesIndexed(r.pages);
+        }
+      })
+      .catch(() => {
+        /* gbrain unreachable — leave dash */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onOpenOverlay = async () => {
     await window.pmf.openOverlay();
@@ -35,7 +60,9 @@ export function Dashboard() {
         <div className="dashboard__brand">Arvya Closer</div>
         <div className="dashboard__scoreboard">
           <div className="scoreboard__big">
-            <div className="scoreboard__value">{pagesIndexed ?? '—'}</div>
+            <div className="scoreboard__value">
+              {pagesIndexed === null ? '—' : animatedPages.toLocaleString()}
+            </div>
             <div className="scoreboard__label">pages indexed</div>
           </div>
           <div className="scoreboard__small">
@@ -53,6 +80,13 @@ export function Dashboard() {
               Open Live Overlay
             </button>
           )}
+          <button
+            onClick={() => setReceiptOpen(true)}
+            className="btn btn--ghost"
+            style={{ marginLeft: 8 }}
+          >
+            End Call (demo)
+          </button>
         </div>
       </header>
 
@@ -63,7 +97,6 @@ export function Dashboard() {
           <>
             <aside className="dashboard__rail-left">
               <div className="rail__title">Account Queue</div>
-              {/* TODO(Prashanth — lane/dash): AccountQueue component */}
               <div className="rail__placeholder">Drop accounts here</div>
             </aside>
 
@@ -83,6 +116,8 @@ export function Dashboard() {
           </>
         )}
       </main>
+
+      <LearningReceipt open={receiptOpen} onClose={() => setReceiptOpen(false)} />
     </div>
   );
 }
