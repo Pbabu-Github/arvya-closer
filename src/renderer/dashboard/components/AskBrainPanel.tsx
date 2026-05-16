@@ -131,7 +131,7 @@ export function AskBrainPanel() {
     ]);
     const cleaned = input
       .toLowerCase()
-      .replace(/[^\w\s/-]/g, ' ')
+      .replace(/[^\w\s]/g, ' ') // split on slash, hyphen, punctuation — gbrain FTS treats them as token boundaries
       .split(/\s+/)
       .filter((w) => w && !stopwords.has(w));
     // Return at least 1 token even if all were stopwords
