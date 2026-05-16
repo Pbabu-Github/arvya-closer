@@ -18,11 +18,13 @@ export function useStaggerReveal<T>(items: T[], stepMs: number = 80): T[] {
 
   useEffect(() => {
     if (items.length === 0) {
-      setVisible([]);
+      setVisible((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     const safeStep = stepMs > 0 ? stepMs : 1;
-    setVisible([items[0]!]);
+    setVisible((prev) =>
+      prev.length === 1 && prev[0] === items[0] ? prev : [items[0]!],
+    );
     const handles: ReturnType<typeof setTimeout>[] = [];
     for (let i = 1; i < items.length; i++) {
       const h = setTimeout(() => {
