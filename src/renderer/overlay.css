@@ -27,37 +27,89 @@ body,
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: 14px minmax(0, 4fr) minmax(0, 1fr) auto auto;
-  padding: 6px 12px 12px;
-  gap: 8px;
+  grid-template-rows: 32px minmax(0, 4fr) minmax(0, 1fr) auto auto;
+  padding: 0;
+  gap: 0;
+  /* Solid panel shell so the whole rectangle is visible on any background */
+  background: rgba(12, 12, 18, 0.96);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(108, 99, 255, 0.55);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  overflow: hidden;
 }
 
-.overlay-drag-handle {
+/* ─── Title bar: visible drag surface + brand + hint ─── */
+.overlay-titlebar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
+  height: 32px;
+  background: linear-gradient(
+    180deg,
+    rgba(108, 99, 255, 0.18) 0%,
+    rgba(108, 99, 255, 0.08) 100%
+  );
+  border-bottom: 1px solid rgba(108, 99, 255, 0.35);
   cursor: grab;
-  padding: 4px 0 0;
   -webkit-app-region: drag;
+  user-select: none;
 }
-.overlay-drag-handle:active { cursor: grabbing; }
+.overlay-titlebar:active { cursor: grabbing; }
 
-.overlay-drag-handle__grip {
-  display: block;
-  width: 44px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.28);
-  transition: background 140ms ease-out;
+.overlay-titlebar__grip {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-template-rows: repeat(3, 3px);
+  gap: 3px;
+  opacity: 0.5;
+  transition: opacity 140ms ease-out;
 }
-.overlay-drag-handle:hover .overlay-drag-handle__grip {
-  background: rgba(255, 255, 255, 0.55);
+.overlay-titlebar:hover .overlay-titlebar__grip { opacity: 0.95; }
+.overlay-titlebar__grip > span {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #c2bdff;
+}
+
+.overlay-titlebar__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #e8e6ff;
+  text-transform: lowercase;
+}
+.overlay-titlebar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00d4aa;
+  box-shadow: 0 0 6px rgba(0, 212, 170, 0.7);
+}
+
+.overlay-titlebar__hint {
+  margin-left: auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: rgba(232, 230, 255, 0.45);
+  letter-spacing: 0.04em;
 }
 
 /* card wrap holds previous + current during crossfade */
 .overlay-card-wrap {
   position: relative;
   min-height: 0;
+  margin: 12px 12px 0;
 }
 
 .overlay-card {
@@ -66,11 +118,9 @@ body,
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: rgba(15, 15, 22, 0.92);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(108, 99, 255, 0.32);
-  border-left: 1px solid #6c63ff;
+  background: rgba(22, 22, 32, 0.78);
+  border: 1px solid rgba(108, 99, 255, 0.38);
+  border-left: 3px solid #6c63ff;
   border-radius: 8px;
   padding: 16px 18px;
   -webkit-app-region: no-drag;
@@ -172,8 +222,9 @@ body,
 }
 
 .overlay-transcript {
-  background: rgba(15, 15, 22, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 8px 12px 0;
+  background: rgba(22, 22, 32, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 7px 10px;
   -webkit-app-region: no-drag;
@@ -182,12 +233,12 @@ body,
 }
 .overlay-transcript__placeholder {
   font-size: 11px;
-  color: #555560;
+  color: #888894;
   font-style: italic;
 }
 .overlay-transcript__line {
   font-size: 11px;
-  color: rgba(184, 184, 196, 0.5);
+  color: rgba(232, 230, 255, 0.78);
   line-height: 1.35;
   font-style: italic;
   overflow: hidden;
@@ -223,8 +274,8 @@ body,
   display: flex;
   justify-content: space-between;
   font-size: 10px;
-  color: #555560;
-  padding: 0 4px;
+  color: rgba(232, 230, 255, 0.5);
+  padding: 8px 12px;
   -webkit-app-region: no-drag;
 }
 .overlay-footer__state.on {

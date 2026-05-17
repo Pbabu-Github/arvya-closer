@@ -83,8 +83,8 @@ function createOverlayWindow() {
   }
 
   const primary = screen.getPrimaryDisplay();
-  const width = 440;
-  const height = 320;
+  const width = 480;
+  const height = 380;
 
   overlayWindow = new BrowserWindow({
     width,

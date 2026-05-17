@@ -276,11 +276,18 @@ export function Overlay() {
   return (
     <div className="overlay-root">
       <div
-        className="overlay-drag-handle"
+        className="overlay-titlebar"
         title="Drag to move overlay"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
-        <span className="overlay-drag-handle__grip" />
+        <span className="overlay-titlebar__grip">
+          <span /><span /><span /><span /><span /><span />
+        </span>
+        <span className="overlay-titlebar__label">
+          <span className="overlay-titlebar__dot" />
+          arvya · live coach
+        </span>
+        <span className="overlay-titlebar__hint">drag to move</span>
       </div>
       <div className="overlay-card-wrap">
         {previousCard && (
@@ -332,6 +339,7 @@ export function Overlay() {
           {
             display: "flex",
             gap: 6,
+            margin: "8px 12px 0",
             WebkitAppRegion: "no-drag",
           } as React.CSSProperties
         }
