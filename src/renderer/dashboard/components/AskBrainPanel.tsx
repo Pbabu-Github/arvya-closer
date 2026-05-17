@@ -8,7 +8,7 @@
  * return a clean prose answer.
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
 type Citation = {
@@ -37,13 +37,21 @@ export function AskBrainPanel() {
   const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
   const [stage, setStage] = useState<'idle' | 'searching' | 'synthesizing' | 'done'>('idle');
 
-  // Streaming/typing effect for ChatGPT-feel
-  const streamAnswer = (full: string) => {
+  // Generation token — every new ask bumps this, killing any in-flight
+  // typewriter/anthropic-call from a prior question so they can't overwrite
+  // the new answer (the "every question shows the same thing" bug).
+  const genRef = useRef(0);
+
+  // Streaming/typing effect for ChatGPT-feel. Captures `gen` at call-time;
+  // any tick whose gen no longer matches the live one is a stale stream and
+  // aborts itself silently.
+  const streamAnswer = (full: string, gen: number) => {
+    if (gen !== genRef.current) return;
     setAnswer('');
     let i = 0;
     const tick = () => {
+      if (gen !== genRef.current) return; // stale stream — abort
       if (i >= full.length) return;
-      // Reveal ~2-3 chars per frame for that satisfying typewriter feel
       const step = Math.max(2, Math.min(6, Math.floor(full.length / 250)));
       i = Math.min(full.length, i + step);
       setAnswer(full.slice(0, i));
@@ -55,6 +63,9 @@ export function AskBrainPanel() {
   const onAsk = async (q?: string) => {
     const finalQ = (q ?? question).trim();
     if (!finalQ) return;
+    // Bump generation FIRST — invalidates any prior in-flight stream/anthropic
+    // call before we touch state.
+    const myGen = ++genRef.current;
     setLoading(true);
     setError(null);
     setAnswer(null);
@@ -79,6 +90,7 @@ export function AskBrainPanel() {
 
       const allHits: Citation[] = [];
       for (const q of queries) {
+        if (myGen !== genRef.current) return; // user fired a new question — bail
         try {
           const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
           if (r.ok) {
@@ -89,6 +101,7 @@ export function AskBrainPanel() {
           /* skip individual search failures */
         }
       }
+      if (myGen !== genRef.current) return;
 
       // Dedupe by slug+chunk_text, keep highest score per slug
       const dedupedMap = new Map<string, Citation>();
@@ -104,6 +117,7 @@ export function AskBrainPanel() {
         .slice(0, 8);
 
       if (hits.length === 0) {
+        if (myGen !== genRef.current) return;
         setError(
           'No content found. Try keyword-style ("DealCloud", "buyer tracker") or a specific name ("FT Partners", "Naveen Siva").',
         );
@@ -111,6 +125,7 @@ export function AskBrainPanel() {
       }
 
       // STEP 2 — render citations immediately
+      if (myGen !== genRef.current) return;
       setCitations(hits);
       setStage('synthesizing');
 
@@ -127,19 +142,23 @@ export function AskBrainPanel() {
       const user = `Sources from our brain:\n\n${context}\n\n---\n\nQuestion: ${finalQ}\n\nAnswer the question using the sources above. If the sources are about adjacent topics, surface what they DO say and note the adjacency.`;
 
       const a = (await window.pmf.anthropic.chat(system, user)) as { ok: boolean; text?: string; error?: string };
+      if (myGen !== genRef.current) return; // stale anthropic response — drop it
       if (a.ok && a.text) {
         setStage('done');
-        streamAnswer(a.text);
+        streamAnswer(a.text, myGen);
       } else {
         setAnswer(synthesizeFallback(finalQ, hits));
         setStage('done');
         if (a.error) console.warn('[ask-brain] anthropic failed, showed fallback:', a.error);
       }
     } catch (e) {
+      if (myGen !== genRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
-      setStage('idle');
+      if (myGen === genRef.current) {
+        setLoading(false);
+        setStage('idle');
+      }
     }
   };
 
