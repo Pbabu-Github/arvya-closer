@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
-import { BrainSeedPanel } from './components/BrainSeedPanel';
-import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
-import { FindEventsPanel } from './components/FindEventsPanel';
-import { FindPeoplePanel } from './components/FindPeoplePanel';
-import { AskBrainPanel } from './components/AskBrainPanel';
-import { AccountQueue, type Prospect } from './components/AccountQueue';
-import { SelectedAccountDetail } from './components/SelectedAccountDetail';
-import { useCountUp } from '../hooks/useCountUp';
+import { useEffect, useState } from "react";
+import { BrainSeedPanel } from "./components/BrainSeedPanel";
+import { DemoAutopsyPanel } from "./components/DemoAutopsyPanel";
+import { FindEventsPanel } from "./components/FindEventsPanel";
+import { FindPeoplePanel } from "./components/FindPeoplePanel";
+import { AskBrainPanel } from "./components/AskBrainPanel";
+import { AccountQueue, type Prospect } from "./components/AccountQueue";
+import { SelectedAccountDetail } from "./components/SelectedAccountDetail";
+import { useCountUp } from "../hooks/useCountUp";
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
-type View = 'home' | 'autopsy' | 'events' | 'people' | 'sources';
+type View = "home" | "autopsy" | "events" | "people" | "sources";
 
 // ─────────────────────────────────────────────────────────────
 // Inline SVG primitives (matches the design-kit Icon / wordmark)
@@ -85,9 +85,21 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
 function ArvyaWordmark() {
   return (
     <span className="titlebar__brand">
-      <svg width={15} height={15} viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+      <svg
+        width={15}
+        height={15}
+        viewBox="0 0 32 32"
+        fill="none"
+        style={{ flexShrink: 0 }}
+      >
         <path d="M8 6 L24 16 L8 26 Z" fill="currentColor" opacity="0.16" />
-        <path d="M8 6 L24 16 L8 26" stroke="currentColor" strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d="M8 6 L24 16 L8 26"
+          stroke="currentColor"
+          strokeWidth={2.4}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
         <circle cx={8} cy={16} r={2} fill="currentColor" />
       </svg>
       arvya
@@ -98,20 +110,22 @@ function ArvyaWordmark() {
 export function Dashboard() {
   const [pagesIndexed, setPagesIndexed] = useState<number | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const [view, setView] = useState<View>('home');
-  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
+  const [view, setView] = useState<View>("home");
+  const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(
+    null,
+  );
 
   // Animated count-up for Mission Scoreboard
   const animatedPages = useCountUp(pagesIndexed ?? 0, 1600);
 
   // Pull real stats from gbrain on mount
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.pmf) return;
+    if (typeof window === "undefined" || !window.pmf) return;
     let cancelled = false;
     window.pmf.brain
       .stats()
       .then((r) => {
-        if (!cancelled && r.ok && typeof r.pages === 'number') {
+        if (!cancelled && r.ok && typeof r.pages === "number") {
           setPagesIndexed(r.pages);
         }
       })
@@ -140,9 +154,13 @@ export function Dashboard() {
         <ArvyaWordmark />
 
         <div className="live-pill">
-          <span className={`dot ${pagesIndexed === null ? 'dot--idle' : 'dot--ok dot--pulse'}`} />
+          <span
+            className={`dot ${pagesIndexed === null ? "dot--idle" : "dot--ok dot--pulse"}`}
+          />
           <span>
-            <strong>{pagesIndexed === null ? '—' : animatedPages.toLocaleString()}</strong>{' '}
+            <strong>
+              {pagesIndexed === null ? "—" : animatedPages.toLocaleString()}
+            </strong>{" "}
             pages · brain live
           </span>
         </div>
@@ -156,7 +174,10 @@ export function Dashboard() {
               Hide overlay
             </button>
           ) : (
-            <button onClick={onOpenOverlay} className="btn btn--primary btn--sm">
+            <button
+              onClick={onOpenOverlay}
+              className="btn btn--primary btn--sm"
+            >
               <Icon name="eye" size={12} />
               Open Live Overlay
             </button>
@@ -166,89 +187,114 @@ export function Dashboard() {
       </header>
 
       {/* ---------- MAIN ---------- */}
-      <main className={`dashboard__main ${view === 'autopsy' ? 'dashboard__main--autopsy' : ''}`}>
-        {view === 'autopsy' ? (
-          <DemoAutopsyPanel onClose={() => setView('home')} />
+      <main
+        className={`dashboard__main ${view === "autopsy" ? "dashboard__main--autopsy" : ""}`}
+      >
+        {view === "autopsy" ? (
+          <DemoAutopsyPanel onClose={() => setView("home")} />
         ) : (
           <>
             {/* SIDEBAR */}
             <aside className="sidebar">
               <div className="sidebar__section">Workspace</div>
               <button
-                className={`nav-item ${view === 'home' ? 'nav-item--active' : ''}`}
-                onClick={() => setView('home')}
+                className={`nav-item ${view === "home" ? "nav-item--active" : ""}`}
+                onClick={() => setView("home")}
               >
-                <span className="nav-item__icon"><Icon name="sparkles" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="sparkles" />
+                </span>
                 <span className="nav-item__label">Today</span>
                 <span className="nav-item__shortcut">1</span>
               </button>
               <button
-                className={`nav-item ${view === 'people' ? 'nav-item--active' : ''}`}
-                onClick={() => setView('people')}
+                className={`nav-item ${view === "people" ? "nav-item--active" : ""}`}
+                onClick={() => setView("people")}
               >
-                <span className="nav-item__icon"><Icon name="circleDot" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="circleDot" />
+                </span>
                 <span className="nav-item__label">Find people</span>
                 <span className="nav-item__shortcut">2</span>
               </button>
               <button
-                className={`nav-item ${view === 'events' ? 'nav-item--active' : ''}`}
-                onClick={() => setView('events')}
+                className={`nav-item ${view === "events" ? "nav-item--active" : ""}`}
+                onClick={() => setView("events")}
               >
-                <span className="nav-item__icon"><Icon name="circleDot" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="circleDot" />
+                </span>
                 <span className="nav-item__label">Find events</span>
                 <span className="nav-item__shortcut">3</span>
               </button>
-              <button className="nav-item" onClick={() => setView('autopsy')}>
-                <span className="nav-item__icon"><Icon name="autopsy" /></span>
+              <button className="nav-item" onClick={() => setView("autopsy")}>
+                <span className="nav-item__icon">
+                  <Icon name="autopsy" />
+                </span>
                 <span className="nav-item__label">Demo autopsy</span>
                 <span className="nav-item__count">15</span>
               </button>
 
               <div className="sidebar__section">Pipeline</div>
               <button className="nav-item">
-                <span className="nav-item__icon"><Icon name="send" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="send" />
+                </span>
                 <span className="nav-item__label">Outreach drafts</span>
                 <span className="nav-item__count">0</span>
               </button>
               <button className="nav-item">
-                <span className="nav-item__icon"><Icon name="phone" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="phone" />
+                </span>
                 <span className="nav-item__label">Booked demos</span>
                 <span className="nav-item__count">0</span>
               </button>
               <button className="nav-item">
-                <span className="nav-item__icon"><Icon name="brain" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="brain" />
+                </span>
                 <span className="nav-item__label">Past calls</span>
-                <span className="nav-item__count">{pagesIndexed ? Math.floor(pagesIndexed / 12) : '—'}</span>
+                <span className="nav-item__count">
+                  {pagesIndexed ? Math.floor(pagesIndexed / 12) : "—"}
+                </span>
               </button>
 
               <div className="sidebar__spacer" />
 
               <div className="sidebar__section">Setup</div>
               <button
-                className={`nav-item ${view === 'sources' ? 'nav-item--active' : ''}`}
-                onClick={() => setView('sources')}
+                className={`nav-item ${view === "sources" ? "nav-item--active" : ""}`}
+                onClick={() => setView("sources")}
               >
-                <span className="nav-item__icon"><Icon name="brain" /></span>
+                <span className="nav-item__icon">
+                  <Icon name="brain" />
+                </span>
                 <span className="nav-item__label">Brain sources</span>
-                <span className="nav-item__count">{pagesIndexed ?? '—'}</span>
+                <span className="nav-item__count">{pagesIndexed ?? "—"}</span>
               </button>
 
               <div className="sidebar__section">Status</div>
-              <div className="nav-item" style={{ cursor: 'default' }}>
-                <span className="nav-item__icon"><span className="dot dot--ok" /></span>
+              <div className="nav-item" style={{ cursor: "default" }}>
+                <span className="nav-item__icon">
+                  <span className="dot dot--ok" />
+                </span>
                 <span className="nav-item__label">gbrain · live</span>
               </div>
             </aside>
 
             {/* CENTER MAIN */}
             <section className="main">
-              {view === 'home' ? (
+              {view === "home" ? (
                 <>
                   <div>
-                    <div className="hero__eyebrow">Today · prior conversations the brain remembers</div>
+                    <div className="hero__eyebrow">
+                      Today · prior conversations the brain remembers
+                    </div>
                     <h1 className="hero__title">Pick up where you left off.</h1>
                     <div className="hero__subtitle">
-                      Every past call is loaded. Click an account to see what the brain knows and draft outreach.
+                      Every past call is loaded. Click an account to see what
+                      the brain knows and draft outreach.
                     </div>
                   </div>
 
@@ -262,26 +308,32 @@ export function Dashboard() {
                     {selectedProspect ? (
                       <SelectedAccountDetail prospect={selectedProspect} />
                     ) : (
-                      <div className="queue queue__empty">Select an account from the queue.</div>
+                      <div className="queue queue__empty">
+                        Select an account from the queue.
+                      </div>
                     )}
                   </div>
 
-                  <button onClick={() => setView('autopsy')} className="autopsy-link">
+                  <button
+                    onClick={() => setView("autopsy")}
+                    className="autopsy-link"
+                  >
                     <span>Run Demo Autopsy on 15 prior calls</span>
                     <span className="autopsy-link__arrow">→</span>
                   </button>
                 </>
-              ) : view === 'people' ? (
+              ) : view === "people" ? (
                 <FindPeoplePanel />
-              ) : view === 'events' ? (
+              ) : view === "events" ? (
                 <FindEventsPanel />
-              ) : view === 'sources' ? (
+              ) : view === "sources" ? (
                 <>
                   <div>
                     <div className="hero__eyebrow">Setup · brain sources</div>
                     <h1 className="hero__title">What the brain reads.</h1>
                     <div className="hero__subtitle">
-                      Local files, transcripts, and decks Arvya pulls into GBrain. Edit, add, re-seed.
+                      Local files, transcripts, and decks Arvya pulls into
+                      GBrain. Edit, add, re-seed.
                     </div>
                   </div>
                   <div className="sources-wrap">
@@ -293,7 +345,6 @@ export function Dashboard() {
           </>
         )}
       </main>
-
     </div>
   );
 }

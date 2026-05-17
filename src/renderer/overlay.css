@@ -1,6 +1,12 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   background: transparent;
@@ -8,7 +14,11 @@ html, body, #root {
 }
 
 .overlay-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   color: #fff;
   overflow: hidden;
 }
@@ -17,7 +27,7 @@ html, body, #root {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: 14px 1fr auto auto auto;
+  grid-template-rows: 14px minmax(0, 4fr) minmax(0, 1fr) auto auto;
   padding: 6px 12px 12px;
   gap: 8px;
 }
@@ -47,42 +57,75 @@ html, body, #root {
 /* card wrap holds previous + current during crossfade */
 .overlay-card-wrap {
   position: relative;
+  min-height: 0;
 }
 
 .overlay-card {
-  position: relative;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   background: rgba(15, 15, 22, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(108, 99, 255, 0.32);
-  border-left: 3px solid #6c63ff;
-  border-radius: 12px;
+  border-left: 1px solid #6c63ff;
+  border-radius: 8px;
   padding: 16px 18px;
   -webkit-app-region: no-drag;
-  transition: opacity 220ms ease-out, border-left-color 600ms ease-out;
+  transition: opacity 200ms ease-out;
 }
 
 .overlay-card--leaving {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
+  animation: card-leave 200ms ease-out forwards;
   pointer-events: none;
 }
 
 .overlay-card--entering {
-  animation: card-enter 220ms ease-out;
+  animation:
+    card-enter 200ms ease-out forwards,
+    card-border-pulse 600ms ease-out forwards;
+}
+
+@keyframes card-leave {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes card-enter {
-  0% { opacity: 0; transform: translateY(4px); border-left-color: #00d4aa; }
-  100% { opacity: 1; transform: translateY(0); border-left-color: #6c63ff; }
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes card-border-pulse {
+  0% {
+    border-left-width: 1px;
+    border-left-color: #00d4aa;
+  }
+  42% {
+    border-left-width: 4px;
+    border-left-color: #00d4aa;
+  }
+  100% {
+    border-left-width: 1px;
+    border-left-color: #6c63ff;
+  }
 }
 
 .overlay-card__badge {
   position: absolute;
   top: 12px;
   right: 14px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: "JetBrains Mono", monospace;
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 4px;
@@ -116,9 +159,10 @@ html, body, #root {
   margin-bottom: 6px;
 }
 .overlay-card__headline {
-  font-size: 17px;
+  max-width: calc(100% - 58px);
+  font-size: 18px;
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.18;
   margin-bottom: 6px;
 }
 .overlay-card__body {
@@ -131,9 +175,10 @@ html, body, #root {
   background: rgba(15, 15, 22, 0.74);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 7px 10px;
   -webkit-app-region: no-drag;
-  min-height: 48px;
+  min-height: 0;
+  overflow: hidden;
 }
 .overlay-transcript__placeholder {
   font-size: 11px;
@@ -142,9 +187,12 @@ html, body, #root {
 }
 .overlay-transcript__line {
   font-size: 11px;
-  color: #888894;
-  line-height: 1.5;
+  color: rgba(184, 184, 196, 0.5);
+  line-height: 1.35;
   font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overlay-demo-btn {
@@ -153,12 +201,14 @@ html, body, #root {
   color: #c2bdff;
   padding: 8px 12px;
   border-radius: 8px;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: background 150ms ease-out, border-color 150ms ease-out;
+  transition:
+    background 150ms ease-out,
+    border-color 150ms ease-out;
 }
 .overlay-demo-btn:hover:not(:disabled) {
   background: rgba(108, 99, 255, 0.32);

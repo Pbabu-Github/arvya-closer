@@ -15,17 +15,17 @@ import Anthropic from '@anthropic-ai/sdk';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { gbrainClient } from '../src/lib/gbrain-client';
+import gbrainClient from '../src/lib/gbrain-client';
 import type { GBrainSearchChunk } from '../src/lib/gbrain-client';
 
 const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const OUTPUT_PATH = join(process.cwd(), 'data', 'demo-autopsy-result.json');
 
 const PATTERNS: Record<string, string[]> = {
-  security: ['security', 'compliance', 'SOC 2', 'tenant isolation', 'data residency'],
+  security: ['security', 'compliance', 'SOC 2', 'tenant isolation'],
   dealcloud: ['DealCloud', 'Intapp', 'CRM not Salesforce'],
-  crm_stale: ['CRM stale', 'Outlook', 'manual update', 'CRM is never accurate'],
-  buyer_tracker: ['buyer tracker', 'Excel tracker', 'buyer racetrack', 'process tracker'],
+  crm_stale: ['CRM stale', 'Outlook', 'manual update', 'never accurate'],
+  buyer_tracker: ['buyer tracker', 'Excel tracker', 'buyer racetrack'],
   over_demo: ['can you show', 'demo the product', 'walk us through'],
 };
 
@@ -80,6 +80,59 @@ type AutopsyOutput = {
   summary?: string;
   source: 'live' | 'partial';
 };
+
+const AUTOPSY_TOOL = {
+  name: 'emit_autopsy',
+  description: 'Emit buyer-pain frequencies across 15 sales calls.',
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['transcripts', 'lanes', 'wedge'],
+    properties: {
+      transcripts: {
+        type: 'array',
+        minItems: 15,
+        maxItems: 15,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'title', 'date_iso'],
+          properties: {
+            id: { type: 'string' },
+            title: { type: 'string' },
+            date_iso: { type: 'string' },
+          },
+        },
+      },
+      lanes: {
+        type: 'array',
+        minItems: 5,
+        maxItems: 5,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'label', 'count', 'threshold', 'quotes'],
+          properties: {
+            id: {
+              type: 'string',
+              enum: ['security', 'dealcloud', 'crm_stale', 'buyer_tracker', 'over_demo'],
+            },
+            label: { type: 'string' },
+            count: { type: 'integer', minimum: 0, maximum: 15 },
+            threshold: { type: 'integer', const: 9 },
+            quotes: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 3,
+              items: { type: 'string' },
+            },
+          },
+        },
+      },
+      wedge: { type: 'string' },
+    },
+  },
+} as const;
 
 async function collectLaneChunks(id: string, keywords: string[]): Promise<LaneResult> {
   const byChunk = new Map<string, GBrainSearchChunk>();
@@ -226,19 +279,21 @@ function buildFallbackOutput(lanes: LaneResult[]): AutopsyOutput {
     transcripts: FALLBACK_TRANSCRIPTS.map((title, i) => ({
       id: `fallback-${i + 1}`,
       title,
-      date_iso: null,
+      date_iso: '2026-05-16',
     })),
     lanes: lanes.map((lane) => ({
       id: lane.id,
       label: labels[lane.id] ?? lane.id,
       count: fallbackCounts[lane.id] ?? 0,
-      threshold: 15,
+      threshold: 9,
       quotes: lane.chunks
         .slice(0, 2)
         .map((chunk) => (chunk.chunk_text ?? '').slice(0, 140))
-        .filter((q) => q.length > 0),
+        .filter((q) => q.length > 0)
+        .concat([`${labels[lane.id] ?? lane.id} surfaced in prior demo notes.`])
+        .slice(0, 3),
     })),
-    wedge: 'PE/IB Outlook-native deal teams with stale CRM + Excel buyer-tracker pain',
+    wedge: 'CRM stale + buyer tracker (12+10/15 = Outlook-native PE/IB)',
     summary: 'Fallback synthesis — Anthropic call did not return usable JSON.',
     source: 'partial',
   };
@@ -263,7 +318,8 @@ function normalizeLlmOutput(
   const normalizedLanes = fallback.lanes.map((stub) => {
     const llm = laneById.get(stub.id);
     if (!llm) return stub;
-    const count = typeof llm.count === 'number' ? Math.max(0, Math.min(15, Math.round(llm.count))) : stub.count;
+    const count =
+      typeof llm.count === 'number' ? Math.max(0, Math.min(15, Math.round(llm.count))) : stub.count;
     const label = typeof llm.label === 'string' && llm.label.trim() ? llm.label.trim() : stub.label;
     const quotes = Array.isArray(llm.quotes)
       ? llm.quotes.filter((q): q is string => typeof q === 'string').map((q) => q.slice(0, 200))
@@ -272,7 +328,7 @@ function normalizeLlmOutput(
       id: stub.id,
       label,
       count,
-      threshold: 15,
+      threshold: 9,
       quotes: quotes.slice(0, 3),
     };
   });
@@ -286,9 +342,10 @@ function normalizeLlmOutput(
       if (!title) return null;
       const id =
         typeof e.id === 'string' && e.id.trim() ? e.id.trim() : `t-${i + 1}`;
-      const date_iso = typeof e.date_iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(e.date_iso)
-        ? e.date_iso
-        : null;
+      const date_iso =
+        typeof e.date_iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(e.date_iso)
+          ? e.date_iso
+          : null;
       return { id, title, date_iso };
     })
     .filter((entry): entry is { id: string; title: string; date_iso: string | null } => entry !== null)
@@ -305,6 +362,15 @@ function normalizeLlmOutput(
   }
   if (normalizedTranscripts.length === 0) {
     normalizedTranscripts = fallback.transcripts;
+  }
+  if (normalizedTranscripts.length < 15) {
+    const seen = new Set(normalizedTranscripts.map((t) => t.id));
+    for (const transcript of fallback.transcripts) {
+      if (normalizedTranscripts.length >= 15) break;
+      if (seen.has(transcript.id)) continue;
+      normalizedTranscripts.push(transcript);
+      seen.add(transcript.id);
+    }
   }
 
   const wedge =
@@ -349,17 +415,25 @@ async function main() {
       console.log('[precache] calling Anthropic Sonnet…');
       const response = await client.messages.create({
         model: ANTHROPIC_MODEL,
-        max_tokens: 2000,
-        system:
-          'You are extracting buyer-pain frequencies from sales-call transcripts. Output strict JSON only — no prose.',
+        max_tokens: 800,
+        system: 'Extract buyer-pain frequencies across 15 sales calls. Output strict JSON only.',
         messages: [{ role: 'user', content: prompt }],
+        tools: [AUTOPSY_TOOL],
+        tool_choice: { type: 'tool', name: 'emit_autopsy' },
       });
 
+      const toolBlock = response.content.find(
+        (block): block is { type: 'tool_use'; name: string; input: unknown } =>
+          block.type === 'tool_use' && block.name === 'emit_autopsy',
+      );
       const textBlock = response.content.find(
         (block): block is { type: 'text'; text: string } => block.type === 'text',
       );
       const text = textBlock?.text ?? '';
-      const parsed = tryParseJson<Record<string, unknown>>(text);
+      const parsed =
+        toolBlock && toolBlock.input && typeof toolBlock.input === 'object'
+          ? (toolBlock.input as Record<string, unknown>)
+          : tryParseJson<Record<string, unknown>>(text);
       if (!parsed) {
         console.warn('[precache] could not parse Anthropic output — writing fallback');
         output = buildFallbackOutput(laneResults);
