@@ -22,6 +22,8 @@ type Prospect = {
 type Props = {
   selectedSlug: string | null;
   onSelect: (prospect: Prospect) => void;
+  /** Optional CTA — when present, renders a "Find more →" link in the queue header */
+  onFindMore?: () => void;
 };
 
 function relativeDays(iso: string): string {
@@ -34,7 +36,7 @@ function relativeDays(iso: string): string {
   return `${weeks}w ago`;
 }
 
-export function AccountQueue({ selectedSlug, onSelect }: Props) {
+export function AccountQueue({ selectedSlug, onSelect, onFindMore }: Props) {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,8 +68,14 @@ export function AccountQueue({ selectedSlug, onSelect }: Props) {
   return (
     <div className="account-queue">
       <div className="account-queue__head">
-        <span className="account-queue__eyebrow">Account queue</span>
-        <span className="account-queue__count">{prospects.length}</span>
+        <span className="account-queue__eyebrow">
+          Past prospects · {prospects.length}
+        </span>
+        {onFindMore && (
+          <button onClick={onFindMore} className="account-queue__find-more">
+            Find more →
+          </button>
+        )}
       </div>
 
       {error && <div className="account-queue__error">⚠️ {error}</div>}

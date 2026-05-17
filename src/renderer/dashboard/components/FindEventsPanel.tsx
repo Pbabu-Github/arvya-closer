@@ -25,7 +25,10 @@ type Event = {
   __score?: number;
 };
 
-const DEFAULT_CRITERIA = `PE / IB / M&A conferences and meetups in North America, next 90 days, that bring together deal-team analysts, associates, VPs, and CRM/RevOps decision-makers at investment banks and PE firms. Prioritize events where Arvya's pitch lands: Outlook-native, schema-driven CRM (incl. DealCloud), buyer-tracker automation, Deal Brain memory.`;
+// Default is a one-liner. The real "prompt" is built at search time from the
+// gbrain pain context + this short user intent. Edit-prompt toggle lets you
+// override with longer hand-written criteria.
+const DEFAULT_CRITERIA = 'Where do our ICP gather in the next 90 days?';
 
 const EVENT_SCHEMA = {
   type: 'object',
@@ -51,12 +54,26 @@ const EVENT_SCHEMA = {
 
 // Module-level cache: survives tab-switches so the user doesn't lose their
 // search when they move between sidebar views.
+//
+// CRITICAL: written DIRECTLY from onSearch (not only via useEffect) because in
+// React.StrictMode the panel can unmount mid-search and setState on an
+// unmounted component is silently dropped — the useEffect mirror never sees
+// the final values.
 type FindEventsCache = {
   criteria: string;
   events: Event[];
   error: string | null;
 };
 let SESSION_CACHE: FindEventsCache | null = null;
+
+function commitCache(patch: Partial<FindEventsCache>) {
+  SESSION_CACHE = {
+    criteria: SESSION_CACHE?.criteria ?? DEFAULT_CRITERIA,
+    events: SESSION_CACHE?.events ?? [],
+    error: SESSION_CACHE?.error ?? null,
+    ...patch,
+  };
+}
 
 export function FindEventsPanel() {
   const [criteria, setCriteria] = useState(
@@ -96,7 +113,7 @@ export function FindEventsPanel() {
   }, [loading]);
 
   useEffect(() => {
-    SESSION_CACHE = { criteria, events, error };
+    commitCache({ criteria, events, error });
   }, [criteria, events, error]);
 
   useEffect(() => {
@@ -126,6 +143,7 @@ export function FindEventsPanel() {
     setError(null);
     setEvents([]);
     setReranked(false);
+    commitCache({ events: [], error: null });
 
     // ICP context refresh runs in parallel — don't block HOG on the ICP round
     // trip (was costing 1-2s of nothing-on-screen before HOG even fired).
@@ -138,11 +156,15 @@ export function FindEventsPanel() {
       const ctx = await ctxPromise;
       if (myGen !== genRef.current) return;
 
+      // Bias HOG toward authoritative event sources. /deep-research has no
+      // native site-restrict (per docs.thehog.ai/guides/deep-research) so this
+      // lives in the prompt.
       const prompt = [
         painContextBlock(ctx),
-        'Find real, upcoming events that match this criteria. Return ONLY events with a verifiable date or URL.',
+        'Search the public web for real conferences, summits, roundtables, and meetups. Prefer official event websites as the source (return the canonical event URL in the url field). Skip generic listicles, "Top 10 …" articles, and outdated events.',
+        'Return ONLY real, upcoming events with a verifiable date AND URL.',
         '',
-        'Criteria:',
+        'User intent:',
         criteria,
       ]
         .filter(Boolean)
@@ -156,14 +178,18 @@ export function FindEventsPanel() {
 
       if (myGen !== genRef.current) return; // user hit Stop
       if (!r.ok) {
-        setError(r.error ?? 'unknown HOG error');
+        const msg = r.error ?? 'unknown HOG error';
+        setError(msg);
+        commitCache({ error: msg });
         return;
       }
 
       const result = (r.result as { result?: unknown })?.result ?? r.result;
       let parsed = parseEvents(result);
       if (parsed.length === 0) {
-        setError('No events returned. HOG may need broader criteria or more time.');
+        const msg = 'No events returned. HOG may need broader criteria or more time.';
+        setError(msg);
+        commitCache({ error: msg });
         return;
       }
 
@@ -178,9 +204,12 @@ export function FindEventsPanel() {
       }
 
       setEvents(parsed);
+      commitCache({ events: parsed });
     } catch (e) {
       if (myGen !== genRef.current) return;
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      commitCache({ error: msg });
     } finally {
       if (myGen === genRef.current) setLoading(false);
     }

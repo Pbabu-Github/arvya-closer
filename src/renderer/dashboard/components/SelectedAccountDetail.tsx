@@ -12,7 +12,29 @@ import type { Prospect } from './AccountQueue';
 
 type Props = {
   prospect: Prospect;
+  /** Optional CTA — when present, renders a "Find more prospects to demo with" link */
+  onFindMore?: () => void;
 };
+
+/** One citation pulled from gbrain.search — slug/title used for attribution, chunk_text shown italicized */
+type BrainCitation = {
+  slug: string;
+  title?: string;
+  chunk_text: string;
+};
+
+/** Turn a gbrain slug like "calls/coura-arvya-2026-04-30" into "Coura Arvya · 2026-04-30" for display */
+function humanizeSlug(slug: string): string {
+  const tail = slug.split('/').pop() ?? slug;
+  const dateMatch = tail.match(/(\d{4}-\d{2}-\d{2})/);
+  const date = dateMatch ? dateMatch[1] : null;
+  const stem = (date ? tail.replace(date, '') : tail)
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const titled = stem.replace(/\b\w/g, (c) => c.toUpperCase());
+  return date ? `${titled} · ${date}` : titled;
+}
 
 const DRAFT_SYSTEM =
   'You write concise, founder-voiced LinkedIn DMs for Arvya. No greeting, no signoff, three short lines.';
@@ -66,8 +88,8 @@ function pickString(raw: Record<string, unknown> | undefined, keys: string[]): s
   return undefined;
 }
 
-function extractTopSnippets(raw: unknown, max: number): string[] {
-  let arr: Array<{ chunk_text?: string }> = [];
+function extractTopCitations(raw: unknown, max: number): BrainCitation[] {
+  let arr: Array<{ slug?: string; title?: string; chunk_text?: string }> = [];
   try {
     let text: string | null = null;
     if (raw && typeof raw === 'object' && 'content' in raw) {
@@ -78,23 +100,27 @@ function extractTopSnippets(raw: unknown, max: number): string[] {
       const parsed = JSON.parse(text);
       if (Array.isArray(parsed)) arr = parsed;
     } else if (Array.isArray(raw)) {
-      arr = raw as Array<{ chunk_text?: string }>;
+      arr = raw as typeof arr;
     }
   } catch {
     /* ignore */
   }
   return arr
     .slice(0, max)
-    .map((r) => (r.chunk_text ?? '').slice(0, 240).replace(/\s+/g, ' ').trim())
-    .filter((s) => s.length > 0);
+    .map((r) => ({
+      slug: String(r.slug ?? ''),
+      title: typeof r.title === 'string' ? r.title : undefined,
+      chunk_text: (r.chunk_text ?? '').slice(0, 280).replace(/\s+/g, ' ').trim(),
+    }))
+    .filter((c) => c.chunk_text.length > 0);
 }
 
 // Per-prospect HOG enrichment cache — survives re-selects and HMR remounts so we
 // never re-bill credits for an account that's already been enriched this session.
 const ENRICH_CACHE = new Map<string, Record<string, unknown>>();
 
-export function SelectedAccountDetail({ prospect }: Props) {
-  const [brainSnippets, setBrainSnippets] = useState<string[]>([]);
+export function SelectedAccountDetail({ prospect, onFindMore }: Props) {
+  const [brainCitations, setBrainCitations] = useState<BrainCitation[]>([]);
   const [brainLoading, setBrainLoading] = useState(false);
   const [brainError, setBrainError] = useState<string | null>(null);
 
@@ -111,7 +137,7 @@ export function SelectedAccountDetail({ prospect }: Props) {
     if (lastSlugRef.current === prospect.slug) return;
     lastSlugRef.current = prospect.slug;
 
-    setBrainSnippets([]);
+    setBrainCitations([]);
     setBrainError(null);
     setEnrichError(null);
     setDraftText(null);
@@ -128,7 +154,7 @@ export function SelectedAccountDetail({ prospect }: Props) {
       .search(`${prospect.name} ${prospect.company}`)
       .then((r) => {
         if (r.ok && r.result) {
-          setBrainSnippets(extractTopSnippets(r.result, 3));
+          setBrainCitations(extractTopCitations(r.result, 3));
         } else if (r.error) {
           setBrainError(r.error);
         }
@@ -167,7 +193,7 @@ export function SelectedAccountDetail({ prospect }: Props) {
         DRAFT_USER_TEMPLATE({
           prospect,
           enrichment: enrichment ?? undefined,
-          brainSnippets,
+          brainSnippets: brainCitations.map((c) => c.chunk_text),
         }),
       )) as { ok: boolean; text?: string; error?: string };
       if (!r.ok) setDraftError(r.error ?? 'unknown Anthropic error');
@@ -199,16 +225,29 @@ export function SelectedAccountDetail({ prospect }: Props) {
       <div className="account-detail__signal">{prospect.signal}</div>
 
       <section className="account-detail__section">
-        <div className="account-detail__section-title">Brain context · past calls</div>
+        <div className="account-detail__section-title">
+          Brain context · past calls
+          {brainCitations.length > 0 && (
+            <span className="account-detail__cite-count"> · {brainCitations.length} from your brain</span>
+          )}
+        </div>
         {brainLoading && <div className="account-detail__loading">Querying gbrain…</div>}
         {brainError && <div className="account-detail__error">⚠️ gbrain: {brainError}</div>}
-        {!brainLoading && !brainError && brainSnippets.length === 0 && (
+        {!brainLoading && !brainError && brainCitations.length === 0 && (
           <div className="account-detail__loading">No prior snippets found.</div>
         )}
-        {brainSnippets.length > 0 && (
-          <ul className="account-detail__snippets">
-            {brainSnippets.map((s, i) => (
-              <li key={i}>{s}</li>
+        {brainCitations.length > 0 && (
+          <ul className="account-detail__citations">
+            {brainCitations.map((c, i) => (
+              <li key={`${c.slug}-${i}`} className="account-detail__cite">
+                <div className="account-detail__cite-head">
+                  <span className="account-detail__cite-index">[{i + 1}]</span>
+                  <span className="account-detail__cite-title">
+                    {c.title ?? humanizeSlug(c.slug) ?? 'past call'}
+                  </span>
+                </div>
+                <div className="account-detail__cite-text">"{c.chunk_text}"</div>
+              </li>
             ))}
           </ul>
         )}
@@ -260,6 +299,17 @@ export function SelectedAccountDetail({ prospect }: Props) {
           </div>
         )}
       </section>
+
+      {onFindMore && (
+        <footer className="account-detail__find-more">
+          <button onClick={onFindMore} className="account-detail__find-more-link">
+            Find more prospects to demo with →
+          </button>
+          <span className="account-detail__find-more-hint">
+            Search the same ICP as {prospect.name}
+          </span>
+        </footer>
+      )}
     </div>
   );
 }

@@ -236,8 +236,10 @@ export function FindPeoplePanel() {
     setError(null);
     setPeople([]);
     setEvents([]);
+    setBrainHits([]);
     peopleRef.current = [];
     eventsRef.current = [];
+    commitCache({ people: [], events: [], brainHits: [], error: null });
     setReranked({ people: false, events: false });
     setSaveState('idle');
     setSaveSlug(null);
@@ -268,24 +270,33 @@ export function FindPeoplePanel() {
         );
         if (myGen !== genRef.current) return;
 
-        const brainPeople: Person[] = [];
+        // Brain hits are CONTEXT, not people. The Arvya brain is seeded from
+        // transcripts (slugs like meeting-notes-…), not person pages. We surface
+        // matches as a separate "Prior context" section instead of pretending
+        // they are fresh prospects. Drop ALL slug-based filtering — trust the
+        // gbrain semantic ranking.
+        const hits: BrainHit[] = [];
         const seen = new Set<string>();
-        for (const hits of results) {
-          for (const h of hits) {
-            if (!h.slug || seen.has(h.slug)) continue;
-            if (!isPersonSlug(h.slug)) continue;
-            seen.add(h.slug);
-            brainPeople.push({
-              name: h.title ?? humanizeSlug(h.slug),
-              source: 'brain',
-              slug: h.slug,
-              why_relevant: (h.chunk_text ?? '').slice(0, 220),
+        for (const queryHits of results) {
+          for (const h of queryHits) {
+            const slug = h.slug ?? '';
+            if (!slug || seen.has(slug)) continue;
+            const excerpt = (h.chunk_text ?? '').trim();
+            if (excerpt.length < 40) continue; // skip empty/entity-only chunks
+            seen.add(slug);
+            hits.push({
+              slug,
+              title: h.title?.trim() || humanizeSlug(slug),
+              excerpt: excerpt.length > 280 ? `${excerpt.slice(0, 280)}…` : excerpt,
             });
+            if (hits.length >= 10) break; // cap UI noise
           }
+          if (hits.length >= 10) break;
         }
-        const merged = mergePeople(peopleRef.current, brainPeople);
-        peopleRef.current = merged;
-        setPeople(merged);
+
+        setBrainHits(hits);
+        // CRITICAL: cache directly — useEffect mirror won't fire after unmount.
+        commitCache({ brainHits: hits });
       } finally {
         if (myGen === genRef.current) setBrainLoading(false);
       }
@@ -297,12 +308,17 @@ export function FindPeoplePanel() {
       try {
         const ctx = await ctxPromise; // resolves in parallel with the brain fan-out
         if (myGen !== genRef.current) return;
+
+        // Bias HOG toward authoritative sources. /deep-research has no native
+        // site-restrict (per docs.thehog.ai/guides/deep-research), so this lives
+        // in the prompt.
         const promptHead = painContextBlock(ctx);
         const prompt = [
           promptHead,
-          'Return ONLY real, named people and real events with verifiable URLs.',
+          'Search the public web. For EACH person, prefer linkedin.com profile URLs as the source (return the full https://linkedin.com/in/... URL in linkedin_url). For each event, prefer the official event website URL.',
+          'Skip generic listicles and "Top 10 …" articles. Skip people you cannot name. Return ONLY real, named people and real events with verifiable URLs.',
           '',
-          'Criteria:',
+          'User intent:',
           criteria,
         ]
           .filter(Boolean)
@@ -318,6 +334,7 @@ export function FindPeoplePanel() {
         if (!r.ok) {
           // Don't blow up — brain may have results. Show error but keep brain.
           setError(`HOG: ${r.error ?? 'unknown error'}`);
+          commitCache({ error: `HOG: ${r.error ?? 'unknown error'}` });
           return;
         }
         const parsed = parseHogResult(r.result);
@@ -328,10 +345,12 @@ export function FindPeoplePanel() {
         const merged = mergePeople(peopleRef.current, hogPeople);
         peopleRef.current = merged;
         setPeople(merged);
+        commitCache({ people: merged });
 
         const mergedEvents = [...eventsRef.current, ...parsed.events];
         eventsRef.current = mergedEvents;
         setEvents(mergedEvents);
+        commitCache({ events: mergedEvents });
 
         // ZE rerank — people. Only fires if brain online AND we have a pain query.
         if (ctx.online && ctx.painQuery && merged.length > 1) {
@@ -339,6 +358,7 @@ export function FindPeoplePanel() {
           if (ranked && myGen === genRef.current) {
             peopleRef.current = ranked;
             setPeople(ranked);
+            commitCache({ people: ranked });
             setReranked((r2) => ({ ...r2, people: true }));
           }
         }
@@ -349,12 +369,15 @@ export function FindPeoplePanel() {
           if (ranked && myGen === genRef.current) {
             eventsRef.current = ranked;
             setEvents(ranked);
+            commitCache({ events: ranked });
             setReranked((r2) => ({ ...r2, events: true }));
           }
         }
       } catch (e) {
         if (myGen !== genRef.current) return;
-        setError(`HOG: ${e instanceof Error ? e.message : String(e)}`);
+        const msg = `HOG: ${e instanceof Error ? e.message : String(e)}`;
+        setError(msg);
+        commitCache({ error: msg });
       } finally {
         if (myGen === genRef.current) {
           setHogLoading(false);
@@ -490,6 +513,33 @@ export function FindPeoplePanel() {
         </div>
       )}
 
+      {brainHits.length > 0 && (
+        <section>
+          <div className="section-header">
+            <div>
+              <div className="section-header__eyebrow">
+                Prior context · from your brain
+                {brainLoading && <span className="findp__loading-tag"> · still reading…</span>}
+              </div>
+              <h2 className="section-header__title">
+                {brainHits.length} relevant {brainHits.length === 1 ? 'conversation' : 'conversations'}
+              </h2>
+            </div>
+          </div>
+          <div className="findp__brain-list">
+            {brainHits.map((h, i) => (
+              <div key={`${h.slug}-${i}`} className="card findp__brain-card">
+                <div className="findp__brain-head">
+                  <h3 className="findp__brain-title">{h.title}</h3>
+                  <span className="findp__brain-slug">{h.slug}</span>
+                </div>
+                <p className="findp__brain-excerpt">{h.excerpt}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {people.length > 0 && (
         <section>
           <div className="section-header">
@@ -527,15 +577,12 @@ export function FindPeoplePanel() {
                   <div>
                     <h3 className="findp__card-title">
                       {p.name}
-                      {p.source === 'brain' && (
-                        <span className="findp__source-tag">from brain</span>
-                      )}
                       {typeof p.__score === 'number' && (
                         <span className="findp__score">{p.__score.toFixed(2)}</span>
                       )}
                     </h3>
                     <div className="findp__card-sub">
-                      {[p.title, p.company].filter(Boolean).join(' · ') || (p.slug ?? '')}
+                      {[p.title, p.company].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                   {p.linkedin_url && (
