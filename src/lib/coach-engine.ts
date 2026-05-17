@@ -1,10 +1,12 @@
 import { structuredCall } from './anthropic';
+import { gbrainClient, type GBrainSearchChunk } from './gbrain-client';
 
 export type CoachCard = {
   type: 'say' | 'ask' | 'avoid' | 'show' | 'close';
   headline: string;
   body: string;
   confidence: number;
+  provenance?: string[]; // slugs of brain pages that backed this card
 };
 
 export type CoachContext = {
@@ -70,9 +72,95 @@ function sanitize(card: CoachCard): CoachCard {
   return {
     type: card.type,
     headline: card.headline.slice(0, 60),
-    body: card.body.slice(0, 120),
+    body: card.body.slice(0, 160),
     confidence: clampConfidence(card.confidence),
+    provenance: card.provenance,
   };
+}
+
+// Pull supporting chunks from gbrain that match the prospect's recent turns.
+// Fans out 3 queries (the raw last turn, stopword-stripped, and a topic hint)
+// then dedupes by slug. Returns top 4. Empty array if gbrain is unreachable —
+// coach degrades to ungrounded mode rather than blocking.
+const COACH_STOPWORDS = new Set([
+  'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
+  'and', 'or', 'but', 'if', 'so', 'just', 'really',
+  'i', 'we', 'you', 'they', 'our', 'your', 'their',
+  'do', 'does', 'did', 'have', 'has', 'had',
+  'in', 'on', 'at', 'to', 'from', 'for', 'of', 'with', 'by', 'about',
+  'what', 'why', 'when', 'where', 'who', 'how', 'which',
+  'this', 'that', 'these', 'those', 'some', 'any', 'all',
+  'not', 'no', 'yes', 'okay', 'ok',
+  // Common transcript filler
+  'um', 'uh', 'like', 'know', 'mean', 'right', 'yeah', 'kinda', 'sorta',
+]);
+
+function stripFiller(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && w.length >= 3 && !COACH_STOPWORDS.has(w))
+    .join(' ');
+}
+
+// Keyword hints that map to known content in the brain. If the joined transcript
+// mentions any, we add a targeted query that surfaces well-curated pages instead
+// of relying on stripFiller alone.
+function topicHint(joined: string): string | null {
+  if (/\bdeal\s?cloud\b/i.test(joined)) return 'DealCloud integration';
+  if (/\bbuyer\s?tracker\b/i.test(joined)) return 'buyer tracker';
+  if (/\bsecur|complian|soc\s?2|hipaa|tenant/i.test(joined)) return 'Arvya security tenant';
+  if (/\bcrm|stale|outlook/i.test(joined)) return 'stale CRM Outlook';
+  if (/\bprice|cost|budget|expensive/i.test(joined)) return 'Arvya pricing';
+  if (/\bvision|differen|why|moat/i.test(joined)) return 'Arvya vision deal brain';
+  return null;
+}
+
+async function fetchBrainContext(
+  ctx: CoachContext,
+): Promise<GBrainSearchChunk[]> {
+  if (ctx.lastTurns.length === 0) return [];
+  const lastTurn = ctx.lastTurns[ctx.lastTurns.length - 1] ?? '';
+  const joined = ctx.lastTurns.join(' ');
+
+  const stripped = stripFiller(lastTurn) || stripFiller(joined);
+  const hint = topicHint(joined);
+
+  const queries = Array.from(
+    new Set(
+      [lastTurn.slice(0, 120), stripped, hint]
+        .filter((q): q is string => !!q && q.length >= 3),
+    ),
+  );
+
+  const seen = new Set<string>();
+  const out: GBrainSearchChunk[] = [];
+  for (const q of queries) {
+    try {
+      const hits = await gbrainClient.search(q, 4);
+      for (const h of hits) {
+        const key = `${h.slug ?? ''}::${(h.chunk_text ?? '').slice(0, 60)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(h);
+        if (out.length >= 4) return out;
+      }
+    } catch {
+      /* skip individual failures — coach degrades gracefully */
+    }
+  }
+  return out;
+}
+
+function chunkBlock(chunks: GBrainSearchChunk[]): string {
+  if (chunks.length === 0) return '';
+  return chunks
+    .map(
+      (c, i) =>
+        `[Brain ${i + 1}] ${c.title ?? c.slug ?? '?'}\n${(c.chunk_text ?? '').slice(0, 380)}`,
+    )
+    .join('\n\n---\n\n');
 }
 
 function deterministicMatch(joined: string): CoachCard | null {
@@ -120,20 +208,54 @@ const FALLBACK_CARD: CoachCard = {
 export async function nextCard(ctx: CoachContext): Promise<CoachCard> {
   const joined = ctx.lastTurns.join(' ').toLowerCase();
 
-  const matched = deterministicMatch(joined);
-  if (matched) return sanitize(matched);
+  // Pull brain context BEFORE both deterministic and LLM paths so every card
+  // can cite a real past call instead of a hardcoded one-liner.
+  const chunks = await fetchBrainContext(ctx);
+  const provenance = chunks.map((c) => c.slug ?? '').filter(Boolean);
 
+  // Deterministic path: still fast, but now we splice the strongest matching
+  // brain quote into the body so the card says *something real from our calls*.
+  const matched = deterministicMatch(joined);
+  if (matched) {
+    if (chunks[0]) {
+      const quote = (chunks[0].chunk_text ?? '').trim().replace(/\s+/g, ' ');
+      const short = quote.length > 140 ? quote.slice(0, 138) + '…' : quote;
+      const sourceLabel = chunks[0].title ?? chunks[0].slug ?? 'brain';
+      return sanitize({
+        ...matched,
+        body: `${matched.body} · From ${sourceLabel}: "${short}"`,
+        provenance,
+      });
+    }
+    return sanitize({ ...matched, provenance });
+  }
+
+  // LLM path with retrieved context. Anthropic now sees real past-call
+  // excerpts and is told to ground in them, with citation in the body.
   try {
+    const contextBlock = chunkBlock(chunks);
+    const userPrompt = contextBlock
+      ? `<transcript_last_turns>\n${ctx.lastTurns.slice(-3).join(' ')}\n</transcript_last_turns>\n` +
+        `<call_stage>${ctx.callStage ?? 'unknown'}</call_stage>\n` +
+        `<brain_context>\n${contextBlock}\n</brain_context>\n` +
+        `Pick the ONE next move. Ground the body in [Brain N] when relevant. ` +
+        `Cite by short page name in the body like: "(from <page>)". ` +
+        `If brain has nothing relevant, say so honestly and lower confidence.`
+      : `<transcript_last_turns>\n${ctx.lastTurns.slice(-3).join(' ')}\n</transcript_last_turns>\n` +
+        `<call_stage>${ctx.callStage ?? 'unknown'}</call_stage>\n` +
+        `No brain context available. Output a generic next move with low confidence (≤0.6).`;
+
+    const system = contextBlock
+      ? `${COACH_SYSTEM} Use ONLY the provided [Brain N] excerpts as evidence. ` +
+        `If they don't speak to the moment, lower confidence below 0.7. Never invent facts.`
+      : COACH_SYSTEM;
+
     const result = await structuredCall<Partial<CoachCard>>({
-      system: COACH_SYSTEM,
-      user: `<transcript_last_turns>${ctx.lastTurns
-        .slice(-3)
-        .join(' ')}</transcript_last_turns>\n<call_stage>${
-        ctx.callStage ?? 'unknown'
-      }</call_stage>\nWhat's the ONE move?`,
+      system,
+      user: userPrompt,
       toolName: 'emit_card',
       schema: COACH_SCHEMA,
-      maxTokens: 150,
+      maxTokens: 180,
     });
 
     const type = (result.type ?? 'ask') as CoachCard['type'];
@@ -142,9 +264,10 @@ export async function nextCard(ctx: CoachContext): Promise<CoachCard> {
       headline: (result.headline ?? FALLBACK_CARD.headline).toString(),
       body: (result.body ?? FALLBACK_CARD.body).toString(),
       confidence: clampConfidence(result.confidence),
+      provenance,
     });
   } catch (error) {
     console.error('[coach-engine] LLM fallback failed:', error);
-    return sanitize(FALLBACK_CARD);
+    return sanitize({ ...FALLBACK_CARD, provenance });
   }
 }

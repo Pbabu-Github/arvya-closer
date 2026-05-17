@@ -7,6 +7,7 @@ type CoachCard = {
   headline: string;
   body: string;
   confidence: number;
+  provenance?: string[];
 };
 
 // Brain-mined prospect quotes. We pull these from gbrain on mount using
@@ -463,7 +464,20 @@ function CoachOverlayCard({
         {listening ? `LISTENING · ${card.type}` : card.type}
       </div>
       <div className="overlay-card__headline">{card.headline}</div>
-      <div className="overlay-card__body">{card.body.slice(0, 120)}</div>
+      <div className="overlay-card__body">{card.body.slice(0, 180)}</div>
+      {card.provenance && card.provenance.length > 0 && (
+        <div className="overlay-card__cites" title={card.provenance.join(', ')}>
+          <span className="overlay-card__cites-label">grounded in</span>
+          {card.provenance.slice(0, 2).map((slug, i) => (
+            <span key={i} className="overlay-card__cite-chip">
+              {shortSlug(slug)}
+            </span>
+          ))}
+          {card.provenance.length > 2 && (
+            <span className="overlay-card__cite-more">+{card.provenance.length - 2}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

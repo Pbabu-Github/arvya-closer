@@ -354,3 +354,42 @@ body,
   text-overflow: ellipsis;
   max-width: 140px;
 }
+
+/* =============================================================
+ * Card provenance chips — shows which brain pages backed the card
+ * ============================================================= */
+
+.overlay-card__cites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(108, 99, 255, 0.22);
+}
+.overlay-card__cites-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(194, 189, 255, 0.55);
+}
+.overlay-card__cite-chip {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(108, 99, 255, 0.16);
+  color: #c2bdff;
+  border: 1px solid rgba(108, 99, 255, 0.32);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.overlay-card__cite-more {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  color: rgba(194, 189, 255, 0.6);
+}
