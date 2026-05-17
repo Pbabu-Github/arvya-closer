@@ -1,8 +1,8 @@
 /**
- * FindPeoplePanel — kick off a HOG deep-research that returns BOTH people we
- * could reach out to AND events we could attend, plus a one-liner on what to
- * do at each. While HOG runs, we rotate through a set of "working" status
- * messages so the dashboard feels alive (HOG itself is not streaming).
+ * FindPeoplePanel — one sweep that hits gbrain (instant — people we've already
+ * met / have transcripts on) and HOG deep-research (slower — outside-world
+ * prospects). Brain results land in 1-3s. HOG fills in fresh names + events
+ * over 30-90s. User can hit Stop anytime and keep whatever's on screen.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -14,6 +14,8 @@ type Person = {
   linkedin_url?: string;
   why_relevant?: string;
   outreach_angle?: string;
+  source?: 'brain' | 'hog';
+  slug?: string;
 };
 
 type Event = {
@@ -66,68 +68,133 @@ const SCHEMA = {
   required: ['people', 'events'],
 } as const;
 
-const LIVE_STEPS = [
-  'Scanning LinkedIn for PE / IB deal leaders…',
-  'Filtering for DealCloud + Outlook signal…',
-  'Cross-checking ACG, SuperReturn, Bloomberg Deal events…',
-  'Ranking by buyer-tracker / CRM-stale pain…',
-  'Drafting outreach angles in founder voice…',
-  'Almost there — finalizing list…',
+// Search terms aimed at the gbrain transcript corpus — pulls people we've
+// actually talked to who match the wedge.
+const BRAIN_SEED_QUERIES = [
+  'investment banker',
+  'private equity',
+  'deal team',
+  'M&A advisor',
+  'DealCloud',
+  'FT Partners',
 ];
 
 export function FindPeoplePanel() {
   const [criteria, setCriteria] = useState(DEFAULT_CRITERIA);
   const [loading, setLoading] = useState(false);
+  const [hogLoading, setHogLoading] = useState(false);
+  const [brainLoading, setBrainLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  const [stepIdx, setStepIdx] = useState(0);
-  const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [elapsed, setElapsed] = useState(0);
 
-  // Rotate "live" status messages while HOG runs
+  const genRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Elapsed-time counter while either lane is running
   useEffect(() => {
     if (!loading) {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current);
-      stepTimerRef.current = null;
-      setStepIdx(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
       return;
     }
-    setStepIdx(0);
-    stepTimerRef.current = setInterval(() => {
-      setStepIdx((i) => Math.min(i + 1, LIVE_STEPS.length - 1));
-    }, 7000);
+    setElapsed(0);
+    const started = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
     return () => {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [loading]);
 
   const onSearch = async () => {
     if (!criteria.trim() || loading) return;
+    const myGen = ++genRef.current;
     setLoading(true);
+    setHogLoading(true);
+    setBrainLoading(true);
     setError(null);
-    setResult(null);
-    try {
-      const r = (await window.pmf.hog.deepResearch({
-        prompt: `Return ONLY real, named people and real events with verifiable URLs. Criteria:\n\n${criteria}`,
-        schema: SCHEMA,
-      })) as { ok: boolean; result?: unknown; error?: string };
+    setPeople([]);
+    setEvents([]);
 
-      if (!r.ok) {
-        setError(r.error ?? 'unknown HOG error');
-        return;
+    // ─── LANE 1: brain-first instant results (1-3s) ───
+    (async () => {
+      try {
+        const brainPeople: Person[] = [];
+        const seen = new Set<string>();
+        for (const q of BRAIN_SEED_QUERIES) {
+          if (myGen !== genRef.current) return;
+          try {
+            const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
+            if (!r.ok) continue;
+            const hits = parseSearchHits(r.result);
+            for (const h of hits) {
+              if (!h.slug || seen.has(h.slug)) continue;
+              if (!isPersonSlug(h.slug)) continue;
+              seen.add(h.slug);
+              brainPeople.push({
+                name: h.title ?? humanizeSlug(h.slug),
+                source: 'brain',
+                slug: h.slug,
+                why_relevant: (h.chunk_text ?? '').slice(0, 220),
+              });
+            }
+          } catch {
+            /* skip individual brain failures */
+          }
+        }
+        if (myGen !== genRef.current) return;
+        setPeople((prev) => mergePeople(prev, brainPeople));
+      } finally {
+        if (myGen === genRef.current) setBrainLoading(false);
       }
+    })();
 
-      const parsed = parseResult(r.result);
-      if (!parsed || (parsed.people.length === 0 && parsed.events.length === 0)) {
-        setError('No results returned. HOG may need a broader or more specific prompt.');
-      } else {
-        setResult(parsed);
+    // ─── LANE 2: HOG deep-research (slower, fresh outside-world prospects) ───
+    (async () => {
+      try {
+        const r = (await window.pmf.hog.deepResearch({
+          prompt: `Return ONLY real, named people and real events with verifiable URLs. Criteria:\n\n${criteria}`,
+          schema: SCHEMA,
+        })) as { ok: boolean; result?: unknown; error?: string };
+
+        if (myGen !== genRef.current) return; // stale or stopped
+        if (!r.ok) {
+          // Don't blow up — brain may have results. Show error but keep brain.
+          setError(`HOG: ${r.error ?? 'unknown error'}`);
+          return;
+        }
+        const parsed = parseHogResult(r.result);
+        if (!parsed) return;
+        setPeople((prev) => mergePeople(prev, parsed.people.map((p) => ({ ...p, source: 'hog' as const }))));
+        setEvents((prev) => [...prev, ...parsed.events]);
+      } catch (e) {
+        if (myGen !== genRef.current) return;
+        setError(`HOG: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        if (myGen === genRef.current) {
+          setHogLoading(false);
+          setLoading(false);
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
+    })();
   };
+
+  const onStop = () => {
+    genRef.current++; // any in-flight callbacks see a stale gen and bail
+    setLoading(false);
+    setHogLoading(false);
+    setBrainLoading(false);
+  };
+
+  const totalFound = people.length + events.length;
+  const status = hogLoading
+    ? `Sweeping HOG · ${elapsed}s elapsed · ${totalFound} found so far`
+    : brainLoading
+      ? `Scanning brain · ${totalFound} found so far`
+      : '';
 
   return (
     <>
@@ -142,7 +209,7 @@ export function FindPeoplePanel() {
       <div className="card card--hero">
         <div className="outreach__head">
           <span className="outreach__eyebrow">Search criteria</span>
-          <span className="outreach__meta">HOG · DEEP RESEARCH · COSTS CREDITS</span>
+          <span className="outreach__meta">GBRAIN + HOG · DEEP RESEARCH</span>
         </div>
 
         <textarea
@@ -153,118 +220,180 @@ export function FindPeoplePanel() {
           placeholder="Who are we looking for? Be specific."
         />
 
-        <div>
-          <button onClick={onSearch} disabled={loading} className="btn btn--primary">
-            {loading ? 'Sweeping… (30–90 sec)' : 'Find people & events via HOG'}
-          </button>
+        <div className="findp__actions">
+          {!loading ? (
+            <button onClick={onSearch} disabled={!criteria.trim()} className="btn btn--primary">
+              Find people & events
+            </button>
+          ) : (
+            <>
+              <button onClick={onStop} className="btn btn--ghost">
+                Stop & keep results ({totalFound})
+              </button>
+              <span className="findp__elapsed">⏱ {elapsed}s · HOG runs 30–90s</span>
+            </>
+          )}
         </div>
 
         {loading && (
           <div className="findp__live">
             <span className="dot dot--accent dot--pulse" />
-            <span className="findp__live-text">{LIVE_STEPS[stepIdx]}</span>
+            <span className="findp__live-text">{status}</span>
           </div>
         )}
 
         {error && <div className="outreach__error">⚠ {error}</div>}
       </div>
 
-      {result && (
-        <>
-          {result.people.length > 0 && (
-            <section>
-              <div className="section-header">
-                <div>
-                  <div className="section-header__eyebrow">People · reach out</div>
-                  <h2 className="section-header__title">{result.people.length} prospects</h2>
-                </div>
-              </div>
-              <div className="findp__list">
-                {result.people.map((p, i) => (
-                  <div key={i} className="card findp__card">
-                    <div className="findp__card-head">
-                      <div>
-                        <h3 className="findp__card-title">{p.name}</h3>
-                        <div className="findp__card-sub">
-                          {[p.title, p.company].filter(Boolean).join(' · ')}
-                        </div>
-                      </div>
-                      {p.linkedin_url && (
-                        <a
-                          href={p.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="events__card-link"
-                        >
-                          linkedin ↗
-                        </a>
+      {people.length > 0 && (
+        <section>
+          <div className="section-header">
+            <div>
+              <div className="section-header__eyebrow">People · reach out</div>
+              <h2 className="section-header__title">
+                {people.length} prospects
+                {brainLoading || hogLoading ? <span className="findp__loading-tag"> · still searching…</span> : null}
+              </h2>
+            </div>
+          </div>
+          <div className="findp__list">
+            {people.map((p, i) => (
+              <div key={`${p.source}-${p.name}-${i}`} className="card findp__card">
+                <div className="findp__card-head">
+                  <div>
+                    <h3 className="findp__card-title">
+                      {p.name}
+                      {p.source === 'brain' && (
+                        <span className="findp__source-tag">from brain</span>
                       )}
+                    </h3>
+                    <div className="findp__card-sub">
+                      {[p.title, p.company].filter(Boolean).join(' · ') || (p.slug ?? '')}
                     </div>
-                    {p.why_relevant && <p className="findp__why">{p.why_relevant}</p>}
-                    {p.outreach_angle && (
-                      <div className="findp__angle">
-                        <span className="findp__angle-label">DM angle</span>
-                        <span className="findp__angle-text">"{p.outreach_angle}"</span>
-                      </div>
-                    )}
                   </div>
-                ))}
+                  {p.linkedin_url && (
+                    <a
+                      href={p.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="events__card-link"
+                    >
+                      linkedin ↗
+                    </a>
+                  )}
+                </div>
+                {p.why_relevant && <p className="findp__why">{p.why_relevant}</p>}
+                {p.outreach_angle && (
+                  <div className="findp__angle">
+                    <span className="findp__angle-label">DM angle</span>
+                    <span className="findp__angle-text">"{p.outreach_angle}"</span>
+                  </div>
+                )}
               </div>
-            </section>
-          )}
+            ))}
+          </div>
+        </section>
+      )}
 
-          {result.events.length > 0 && (
-            <section>
-              <div className="section-header">
-                <div>
-                  <div className="section-header__eyebrow">Events · show up</div>
-                  <h2 className="section-header__title">{result.events.length} events</h2>
-                </div>
-              </div>
-              <div className="findp__list">
-                {result.events.map((ev, i) => (
-                  <div key={i} className="card findp__card">
-                    <div className="findp__card-head">
-                      <div>
-                        <h3 className="findp__card-title">{ev.name}</h3>
-                        <div className="findp__card-meta">
-                          {ev.date && <span className="events__card-pill">📅 {ev.date}</span>}
-                          {ev.location && <span className="events__card-pill">📍 {ev.location}</span>}
-                          {ev.audience && <span className="events__card-pill">👥 {ev.audience}</span>}
-                        </div>
-                      </div>
-                      {ev.url && (
-                        <a href={ev.url} target="_blank" rel="noopener noreferrer" className="events__card-link">
-                          open ↗
-                        </a>
-                      )}
+      {events.length > 0 && (
+        <section>
+          <div className="section-header">
+            <div>
+              <div className="section-header__eyebrow">Events · show up</div>
+              <h2 className="section-header__title">{events.length} events</h2>
+            </div>
+          </div>
+          <div className="findp__list">
+            {events.map((ev, i) => (
+              <div key={i} className="card findp__card">
+                <div className="findp__card-head">
+                  <div>
+                    <h3 className="findp__card-title">{ev.name}</h3>
+                    <div className="findp__card-meta">
+                      {ev.date && <span className="events__card-pill">📅 {ev.date}</span>}
+                      {ev.location && <span className="events__card-pill">📍 {ev.location}</span>}
+                      {ev.audience && <span className="events__card-pill">👥 {ev.audience}</span>}
                     </div>
-                    {ev.what_to_say && (
-                      <div className="findp__angle">
-                        <span className="findp__angle-label">Walk-the-floor pitch</span>
-                        <span className="findp__angle-text">"{ev.what_to_say}"</span>
-                      </div>
-                    )}
                   </div>
-                ))}
+                  {ev.url && (
+                    <a href={ev.url} target="_blank" rel="noopener noreferrer" className="events__card-link">
+                      open ↗
+                    </a>
+                  )}
+                </div>
+                {ev.what_to_say && (
+                  <div className="findp__angle">
+                    <span className="findp__angle-label">Walk-the-floor pitch</span>
+                    <span className="findp__angle-text">"{ev.what_to_say}"</span>
+                  </div>
+                )}
               </div>
-            </section>
-          )}
-        </>
+            ))}
+          </div>
+        </section>
       )}
     </>
   );
 }
 
-function parseResult(raw: unknown): Result | null {
+// ---------- helpers ----------
+
+type SearchHit = { slug?: string; title?: string; chunk_text?: string; score?: number };
+
+function parseSearchHits(raw: unknown): SearchHit[] {
+  // Tolerate already-parsed array, MCP envelope, or { result: ... } wrap
+  let v: unknown = raw;
+  for (let i = 0; i < 4; i++) {
+    if (!v) break;
+    if (typeof v === 'object' && 'content' in (v as object)) {
+      const c = (v as { content?: Array<{ text?: string }> }).content;
+      if (Array.isArray(c) && typeof c[0]?.text === 'string') {
+        try { v = JSON.parse(c[0].text); } catch { v = c[0].text; }
+        continue;
+      }
+    }
+    if (typeof v === 'object' && 'result' in (v as object) && Object.keys(v as object).length <= 3) {
+      v = (v as { result: unknown }).result;
+      continue;
+    }
+    break;
+  }
+  if (!Array.isArray(v)) return [];
+  return v as SearchHit[];
+}
+
+// Slug heuristic — gbrain person pages live under `wiki/people/`, `people/`, or
+// embed an attendee name. We want the high-precision case first.
+function isPersonSlug(slug: string): boolean {
+  return /^(wiki\/)?people\//i.test(slug) || /^people-/i.test(slug);
+}
+
+function humanizeSlug(slug: string): string {
+  const tail = slug.split('/').pop() ?? slug;
+  return tail.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function mergePeople(prev: Person[], add: Person[]): Person[] {
+  const out = [...prev];
+  const seen = new Set(prev.map((p) => norm(p.name) + '::' + (p.company ?? '')));
+  for (const p of add) {
+    const k = norm(p.name) + '::' + (p.company ?? '');
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
+function norm(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function parseHogResult(raw: unknown): Result | null {
   const visit = (v: unknown): Result | null => {
     if (!v) return null;
     if (typeof v === 'string') {
-      try {
-        return visit(JSON.parse(v));
-      } catch {
-        return null;
-      }
+      try { return visit(JSON.parse(v)); } catch { return null; }
     }
     if (typeof v === 'object') {
       const o = v as Record<string, unknown>;
