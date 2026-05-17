@@ -1,13 +1,12 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
-import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { gbrainClient } from '../../src/lib/gbrain-client';
 import { chat as anthropicChat } from '../../src/lib/anthropic';
 import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
 import { enrich as hogEnrich, deepResearch as hogDeepResearch } from '../../src/lib/hog';
+import { rerank as zeRerank } from '../../src/lib/zeroentropy';
 import { listProspects } from '../../src/lib/prospects';
-import { enrichAutopsy } from '../../src/lib/autopsy-enrich';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -216,6 +215,18 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle(
+    'pmf:ze:rerank',
+    async (_, query: string, documents: string[]) => {
+      try {
+        const hits = await zeRerank(query, Array.isArray(documents) ? documents : []);
+        return { ok: true, hits };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
+
+  ipcMain.handle(
     'pmf:groq:transcribe',
     async (_, audioBytes: Uint8Array, mimeType?: string) => {
       const apiKey = process.env.GROQ_API_KEY;
@@ -272,26 +283,6 @@ app.whenReady().then(() => {
       return { ok: true, text };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
-
-  ipcMain.handle('pmf:autopsy:load-cached', () => {
-    const path = join(process.cwd(), 'data', 'demo-autopsy-result.json');
-    if (!existsSync(path)) {
-      return {
-        ok: false,
-        error: 'run scripts/precache-demo-autopsy.ts first',
-      };
-    }
-    try {
-      const data = JSON.parse(readFileSync(path, 'utf8'));
-      const enriched = enrichAutopsy(data);
-      return { ok: true, ...enriched };
-    } catch (error) {
-      return {
-        ok: false,
-        error: `failed to read autopsy cache: ${error instanceof Error ? error.message : String(error)}`,
-      };
     }
   });
 

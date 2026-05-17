@@ -16,6 +16,10 @@ const api = {
     deepResearch: (args: { prompt: string; schema: object; urls?: string[] }) =>
       ipcRenderer.invoke('pmf:hog:deep-research', args),
   },
+  ze: {
+    rerank: (query: string, documents: string[]) =>
+      ipcRenderer.invoke('pmf:ze:rerank', query, documents),
+  },
   groq: {
     transcribe: (audioBytes: Uint8Array, mimeType?: string) =>
       ipcRenderer.invoke('pmf:groq:transcribe', audioBytes, mimeType),
@@ -23,9 +27,6 @@ const api = {
   anthropic: {
     chat: (system: string, user: string) =>
       ipcRenderer.invoke('pmf:anthropic:chat', system, user),
-  },
-  autopsy: {
-    loadCached: () => ipcRenderer.invoke('pmf:autopsy:load-cached'),
   },
   coach: {
     nextCard: (context: unknown) => ipcRenderer.invoke('pmf:coach:next-card', context),

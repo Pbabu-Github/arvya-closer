@@ -59,6 +59,17 @@ interface PMFApi {
       Promise<{ ok: boolean; result?: unknown; error?: string }>;
   };
 
+  ze: {
+    rerank: (
+      query: string,
+      documents: string[],
+    ) => Promise<{
+      ok: boolean;
+      hits?: Array<{ index: number; score: number; document: string }>;
+      error?: string;
+    }>;
+  };
+
   groq: {
     transcribe: (
       audioBytes: Uint8Array,
@@ -68,10 +79,6 @@ interface PMFApi {
 
   anthropic: {
     chat: (system: string, user: string) => Promise<{ ok: boolean; text?: string; error?: string }>;
-  };
-
-  autopsy: {
-    loadCached: () => Promise<{ ok: boolean; result?: unknown; error?: string }>;
   };
 
   coach: {

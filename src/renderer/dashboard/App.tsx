@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { BrainSeedPanel } from "./components/BrainSeedPanel";
-import { DemoAutopsyPanel } from "./components/DemoAutopsyPanel";
 import { FindEventsPanel } from "./components/FindEventsPanel";
 import { FindPeoplePanel } from "./components/FindPeoplePanel";
 import { AskBrainPanel } from "./components/AskBrainPanel";
@@ -9,7 +8,7 @@ import { SelectedAccountDetail } from "./components/SelectedAccountDetail";
 import { useCountUp } from "../hooks/useCountUp";
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
-type View = "home" | "autopsy" | "events" | "people" | "sources";
+type View = "home" | "events" | "people" | "sources";
 
 // ─────────────────────────────────────────────────────────────
 // Inline SVG primitives (matches the design-kit Icon / wordmark)
@@ -28,11 +27,6 @@ function Icon({ name, size = 14 }: { name: string; size?: number }) {
       <>
         <circle cx="12" cy="12" r="10" />
         <circle cx="12" cy="12" r="3" fill="currentColor" />
-      </>
-    ),
-    autopsy: (
-      <>
-        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
       </>
     ),
     send: (
@@ -187,12 +181,8 @@ export function Dashboard() {
       </header>
 
       {/* ---------- MAIN ---------- */}
-      <main
-        className={`dashboard__main ${view === "autopsy" ? "dashboard__main--autopsy" : ""}`}
-      >
-        {view === "autopsy" ? (
-          <DemoAutopsyPanel onClose={() => setView("home")} />
-        ) : (
+      <main className="dashboard__main">
+        {(
           <>
             {/* SIDEBAR */}
             <aside className="sidebar">
@@ -227,14 +217,6 @@ export function Dashboard() {
                 <span className="nav-item__label">Find events</span>
                 <span className="nav-item__shortcut">3</span>
               </button>
-              <button className="nav-item" onClick={() => setView("autopsy")}>
-                <span className="nav-item__icon">
-                  <Icon name="autopsy" />
-                </span>
-                <span className="nav-item__label">Demo autopsy</span>
-                <span className="nav-item__count">15</span>
-              </button>
-
               <div className="sidebar__section">Pipeline</div>
               <button className="nav-item">
                 <span className="nav-item__icon">
@@ -314,13 +296,6 @@ export function Dashboard() {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => setView("autopsy")}
-                    className="autopsy-link"
-                  >
-                    <span>Run Demo Autopsy on 15 prior calls</span>
-                    <span className="autopsy-link__arrow">→</span>
-                  </button>
                 </>
               ) : view === "people" ? (
                 <FindPeoplePanel />
