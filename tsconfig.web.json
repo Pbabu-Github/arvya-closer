@@ -20,5 +20,5 @@
       "@/*": ["./src/renderer/*"]
     }
   },
-  "include": ["src/renderer/**/*", "src/lib/**/*"]
+  "include": ["src/renderer/**/*"]
 }

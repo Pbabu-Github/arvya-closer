@@ -8,7 +8,7 @@
  * rerank path against the same ZeroEntropy contract.
  */
 
-import type { IcpContext } from '../../../lib/icp-context';
+import type { IcpContext } from '../../icp-context';
 
 export function ProvenancePill({
   ctx,

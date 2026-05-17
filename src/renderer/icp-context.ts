@@ -1,4 +1,4 @@
-/// <reference path="../renderer/pmf-api.d.ts" />
+/// <reference path="./pmf-api.d.ts" />
 /**
  * ICP context loader — pulls grounding from gbrain before HOG runs.
  *

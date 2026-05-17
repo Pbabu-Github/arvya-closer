@@ -11,7 +11,7 @@ import {
   loadIcpContext,
   painContextBlock,
   type IcpContext,
-} from '../../../lib/icp-context';
+} from '../../icp-context';
 import { ProvenancePill, rerankEvents } from './find-helpers';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 

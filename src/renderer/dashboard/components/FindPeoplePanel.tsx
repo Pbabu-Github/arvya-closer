@@ -10,7 +10,7 @@ import {
   loadIcpContext,
   painContextBlock,
   type IcpContext,
-} from '../../../lib/icp-context';
+} from '../../icp-context';
 import { ProvenancePill, rerankItems, eventToDoc } from './find-helpers';
 
 type Person = {

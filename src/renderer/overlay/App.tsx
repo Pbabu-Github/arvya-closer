@@ -287,7 +287,14 @@ export function Overlay() {
           <span className="overlay-titlebar__dot" />
           arvya · live coach
         </span>
-        <span className="overlay-titlebar__hint">drag to move</span>
+        <button
+          className="overlay-titlebar__close"
+          title="Hide overlay (⌘W)"
+          onClick={() => window.pmf.hideOverlay()}
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          ✕
+        </button>
       </div>
       <div className="overlay-card-wrap">
         {previousCard && (
@@ -365,14 +372,23 @@ export function Overlay() {
           onClick={triggerDemoCard}
           disabled={loading}
           className="overlay-demo-btn"
-          title="⌘⇧N"
+          title={`Feeds a sample buyer objection to the coach so you can preview the card. Current: "${DEMO_PHRASES[demoIdx % DEMO_PHRASES.length]!.prospect}"`}
           style={{ flex: 1 }}
         >
           {loading
             ? "Coach thinking…"
-            : `Demo cycle (${(demoIdx % DEMO_PHRASES.length) + 1}/${DEMO_PHRASES.length})`}
+            : `Try sample objection · ${(demoIdx % DEMO_PHRASES.length) + 1}/${DEMO_PHRASES.length}`}
         </button>
       </div>
+
+      {!listening && (
+        <div className="overlay-explainer">
+          <span className="overlay-explainer__label">Sample says:</span>
+          <span className="overlay-explainer__quote">
+            "{DEMO_PHRASES[demoIdx % DEMO_PHRASES.length]!.prospect}"
+          </span>
+        </div>
+      )}
 
       <div className="overlay-footer">
         <span className="overlay-footer__hint">
