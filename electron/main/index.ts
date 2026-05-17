@@ -7,6 +7,7 @@ import { chat as anthropicChat } from '../../src/lib/anthropic';
 import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
 import { enrich as hogEnrich, deepResearch as hogDeepResearch } from '../../src/lib/hog';
 import { listProspects } from '../../src/lib/prospects';
+import { enrichAutopsy } from '../../src/lib/autopsy-enrich';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -284,7 +285,8 @@ app.whenReady().then(() => {
     }
     try {
       const data = JSON.parse(readFileSync(path, 'utf8'));
-      return { ok: true, ...data };
+      const enriched = enrichAutopsy(data);
+      return { ok: true, ...enriched };
     } catch (error) {
       return {
         ok: false,

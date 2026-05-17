@@ -940,6 +940,20 @@ html, body, #root {
   background: linear-gradient(90deg, var(--accent) 0%, var(--accent-deep) 100%);
   border-radius: 5px 0 0 5px;
   min-width: 0;
+  transition: width 1.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+.autopsy__lane--wedge .autopsy__lane-fill {
+  background: linear-gradient(90deg, var(--critical) 0%, oklch(0.48 0.18 25) 100%);
+}
+.autopsy__lane-threshold {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--fg-2);
+  opacity: 0.32;
+  pointer-events: none;
 }
 
 .autopsy__wedge {
@@ -1613,4 +1627,136 @@ html, body, #root {
 .account-detail__draft-actions {
   display: flex;
   gap: 8px;
+}
+
+/* =============================================================
+   DEMO AUTOPSY — line-flying overlay + interactive lanes
+   ============================================================= */
+
+/* Body becomes a positioning context so SVG overlay can absolute-fill */
+.autopsy__body--lines {
+  position: relative;
+}
+
+.autopsy__lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+}
+
+.autopsy__line {
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  opacity: 0;
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation-name: autopsy-line-fly;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes autopsy-line-fly {
+  0%   { opacity: 0; stroke-dashoffset: 800; }
+  20%  { opacity: 0.55; }
+  100% { opacity: 0.55; stroke-dashoffset: 0; }
+}
+
+/* Per-lane line color → matches the lane chip */
+.autopsy__line--lane-0 { stroke: oklch(0.55 0.18 30 / 0.7); } /* security: warm red */
+.autopsy__line--lane-1 { stroke: oklch(0.58 0.16 260 / 0.7); } /* dealcloud: blue */
+.autopsy__line--lane-2 { stroke: oklch(0.52 0.14 145 / 0.7); } /* crm-stale: green */
+.autopsy__line--lane-3 { stroke: oklch(0.58 0.16 70 / 0.7); }  /* buyer-tracker: amber */
+
+/* Lane row becomes clickable; hover lifts slightly */
+.autopsy__lane {
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.autopsy__lane:hover {
+  background: var(--bg-2);
+}
+.autopsy__lane--active {
+  background: var(--accent-soft);
+}
+
+/* Quote popover inside a lane row, shown when user clicks */
+.autopsy__quote {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  animation: autopsy-quote-in 260ms var(--ease-out);
+}
+.autopsy__quote-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-ink);
+}
+.autopsy__quote-text {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--fg-0);
+  line-height: 1.45;
+}
+@keyframes autopsy-quote-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Source-of-data pill in the header */
+.autopsy__source-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid var(--warning-soft);
+  margin-left: 12px;
+}
+
+.autopsy__error {
+  margin: 24px 0;
+  padding: 14px 18px;
+  background: var(--critical-soft);
+  border: 1px solid var(--critical-soft);
+  border-radius: 10px;
+  color: var(--critical);
+  font-size: 13px;
+}
+.autopsy__error-hint {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-1);
+}
+.autopsy__error-hint code {
+  background: var(--bg-2);
+  border: 1px solid var(--border-0);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.autopsy__summary-hint {
+  font-size: 11px;
+  color: var(--fg-2);
+  font-family: var(--font-serif);
+  font-style: italic;
+  margin-top: 4px;
 }
