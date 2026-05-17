@@ -35,6 +35,22 @@ export function AskBrainPanel() {
   const [citations, setCitations] = useState<Citation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [askedQuestion, setAskedQuestion] = useState<string | null>(null);
+  const [stage, setStage] = useState<'idle' | 'searching' | 'synthesizing' | 'done'>('idle');
+
+  // Streaming/typing effect for ChatGPT-feel
+  const streamAnswer = (full: string) => {
+    setAnswer('');
+    let i = 0;
+    const tick = () => {
+      if (i >= full.length) return;
+      // Reveal ~2-3 chars per frame for that satisfying typewriter feel
+      const step = Math.max(2, Math.min(6, Math.floor(full.length / 250)));
+      i = Math.min(full.length, i + step);
+      setAnswer(full.slice(0, i));
+      if (i < full.length) setTimeout(tick, 14);
+    };
+    tick();
+  };
 
   const onAsk = async (q?: string) => {
     const finalQ = (q ?? question).trim();
@@ -44,69 +60,106 @@ export function AskBrainPanel() {
     setAnswer(null);
     setCitations([]);
     setAskedQuestion(finalQ);
+    setStage('searching');
 
     try {
-      // STEP 1 — strip stopwords so verbose questions tokenize into the
-      // keyword index. gbrain's search is FTS-based; "What are X in Y calls?"
-      // returns 0 hits but "X Y" returns real chunks.
-      const searchTerms = stripStopwords(finalQ);
-      const s = (await window.pmf.gbrain.search(searchTerms)) as { ok: boolean; result?: unknown; error?: string };
-      if (!s.ok) {
-        setError(s.error ?? 'gbrain search failed');
-        return;
-      }
+      // STEP 1 — MULTI-QUERY SEARCH. gbrain FTS is AND-semantic ("ft partners
+      // care most" requires all 4 words in same chunk), so we run 3 separate
+      // searches and merge:
+      //   a) full stripped query
+      //   b) just named entities (capitalized terms from original question)
+      //   c) the 2 most "content-y" tokens
+      const cleaned = stripStopwords(finalQ);
+      const named = extractNamedEntities(finalQ);
+      const top2 = cleaned.split(' ').slice(0, 2).join(' ');
 
-      const hits = parseSearchHits(s.result, 6);
+      const queries = Array.from(
+        new Set([cleaned, named, top2, finalQ].filter((s) => s && s.length > 1)),
+      );
 
-      if (hits.length === 0) {
-        // Try query as fallback (keyword-style)
+      const allHits: Citation[] = [];
+      for (const q of queries) {
         try {
-          const q2 = (await window.pmf.gbrain.query(finalQ)) as { ok: boolean; result?: unknown };
-          const fallback = parseSearchHits(q2.result, 6);
-          if (fallback.length > 0) {
-            setCitations(fallback);
-            setAnswer(synthesizeFallback(finalQ, fallback));
-            return;
+          const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
+          if (r.ok) {
+            const partial = parseSearchHits(r.result, 8);
+            for (const h of partial) allHits.push(h);
           }
         } catch {
-          /* ignore */
+          /* skip individual search failures */
         }
-        setError('No relevant content found in the brain for this question. Try keyword-style ("DealCloud", "buyer tracker") or a more specific question.');
+      }
+
+      // Dedupe by slug+chunk_text, keep highest score per slug
+      const dedupedMap = new Map<string, Citation>();
+      for (const h of allHits) {
+        const key = `${h.slug}::${(h.chunk_text ?? '').slice(0, 80)}`;
+        const existing = dedupedMap.get(key);
+        if (!existing || (h.score ?? 0) > (existing.score ?? 0)) {
+          dedupedMap.set(key, h);
+        }
+      }
+      const hits = Array.from(dedupedMap.values())
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, 8);
+
+      if (hits.length === 0) {
+        setError(
+          'No content found. Try keyword-style ("DealCloud", "buyer tracker") or a specific name ("FT Partners", "Naveen Siva").',
+        );
         return;
       }
 
-      // STEP 2 — render citations immediately so user sees brain hits
+      // STEP 2 — render citations immediately
       setCitations(hits);
+      setStage('synthesizing');
 
-      // STEP 3 — synthesize a grounded prose answer via Anthropic Sonnet 4.6,
-      // grounding it in the retrieved chunks. This is proper RAG.
+      // STEP 3 — synthesize with Anthropic Sonnet 4.6, grounded in chunks
       const context = hits
-        .map(
-          (h, i) =>
-            `[Source ${i + 1}] ${h.title ?? h.slug}\n${(h.chunk_text ?? '').slice(0, 600)}`,
-        )
+        .map((h, i) => `[Source ${i + 1}] ${h.title ?? h.slug}\n${(h.chunk_text ?? '').slice(0, 700)}`)
         .join('\n\n---\n\n');
 
       const system =
-        'You are answering questions about Arvya (an AI execution platform for PE/IB deal teams, built into Outlook) using ONLY the provided source excerpts. ' +
-        'Be specific. Cite sources inline as [Source N]. If the sources do not contain the answer, say so plainly. ' +
-        'Max 4 short paragraphs. Lead with the most concrete fact.';
+        'You answer questions about Arvya (an AI execution platform for PE/IB deal teams, built into Outlook) using ONLY the provided source excerpts. ' +
+        'Be specific and direct. Cite sources inline as [Source N]. If the sources contain partial info, surface the partial info — do NOT refuse with "no info available" unless the sources are genuinely empty. ' +
+        'Max 4 short paragraphs. Lead with the most concrete fact. Sound like a builder, not a chatbot.';
 
-      const user = `Sources from our brain:\n\n${context}\n\n---\n\nQuestion: ${finalQ}`;
+      const user = `Sources from our brain:\n\n${context}\n\n---\n\nQuestion: ${finalQ}\n\nAnswer the question using the sources above. If the sources are about adjacent topics, surface what they DO say and note the adjacency.`;
 
       const a = (await window.pmf.anthropic.chat(system, user)) as { ok: boolean; text?: string; error?: string };
       if (a.ok && a.text) {
-        setAnswer(a.text);
+        setStage('done');
+        streamAnswer(a.text);
       } else {
         setAnswer(synthesizeFallback(finalQ, hits));
+        setStage('done');
         if (a.error) console.warn('[ask-brain] anthropic failed, showed fallback:', a.error);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+      setStage('idle');
     }
   };
+
+  // Extract capitalized terms (proper nouns) from the original question.
+  // "What did FT Partners care about most?" → "FT Partners"
+  function extractNamedEntities(input: string): string {
+    const words = input.split(/\s+/);
+    const named: string[] = [];
+    for (const w of words) {
+      const stripped = w.replace(/[^\w]/g, '');
+      // Skip first word (sentence-start capital) unless it's UPPERCASE or clearly a name
+      if (stripped.length >= 2 && /^[A-Z]/.test(stripped)) {
+        // Skip common sentence-start words
+        if (!/^(What|Why|When|Where|Who|How|Which|Do|Does|Did|Is|Are|Was|Were|Can|Could|Should|Would|Tell|Give|Show|Find)$/.test(stripped)) {
+          named.push(stripped);
+        }
+      }
+    }
+    return named.join(' ').toLowerCase();
+  }
 
   // If Anthropic is unreachable, build a non-LLM "answer" from the chunks so
   // the user still gets value.
@@ -188,10 +241,23 @@ export function AskBrainPanel() {
 
       {error && <div className="outreach__error">⚠ {error}</div>}
 
+      {askedQuestion && loading && !answer && (
+        <div className="ask-brain__thinking">
+          <span className="ask-brain__thinking-dot" />
+          <span className="ask-brain__thinking-dot" />
+          <span className="ask-brain__thinking-dot" />
+          <span className="ask-brain__thinking-label">
+            {stage === 'searching' ? 'Searching 181 pages…' :
+             stage === 'synthesizing' ? 'Thinking…' :
+             'Loading…'}
+          </span>
+        </div>
+      )}
+
       {askedQuestion && answer && (
         <div className="ask-brain__answer">
           <div className="outreach__section-label">Brain says</div>
-          <div className="ask-brain__answer-text">{answer}</div>
+          <div className="ask-brain__answer-text">{answer}{loading && <span className="ask-brain__cursor">▊</span>}</div>
 
           {citations.length > 0 && (
             <>

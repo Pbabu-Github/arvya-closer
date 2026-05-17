@@ -1001,6 +1001,110 @@ html, body, #root {
 }
 
 /* =============================================================
+   FIND PEOPLE — live HOG sweep (people + events combined)
+   ============================================================= */
+.findp__live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--accent-soft);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent-ink);
+  letter-spacing: 0.04em;
+}
+.findp__live-text {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--fg-1);
+}
+
+.findp__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.findp__card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.findp__card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.findp__card-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--fg-0);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.findp__card-sub {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-2);
+  letter-spacing: 0.02em;
+}
+
+.findp__card-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.findp__why {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--fg-1);
+  line-height: 1.45;
+}
+
+.findp__angle {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--info-soft);
+  border-left: 2px solid var(--info);
+  border-radius: 6px;
+}
+.findp__angle-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--info);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.findp__angle-text {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--fg-0);
+  line-height: 1.4;
+}
+
+/* =============================================================
    FIND EVENTS — HOG deep-research result list
    ============================================================= */
 .events__criteria {
@@ -1613,4 +1717,46 @@ html, body, #root {
 .account-detail__draft-actions {
   display: flex;
   gap: 8px;
+}
+
+/* ---- Ask Brain thinking indicator + streaming cursor ---- */
+.ask-brain__thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-0);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--fg-2);
+  font-size: 14px;
+  animation: ask-brain-in 200ms ease-out;
+}
+.ask-brain__thinking-label { margin-left: 6px; }
+.ask-brain__thinking-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: ask-brain-thinking 1.2s ease-in-out infinite;
+}
+.ask-brain__thinking-dot:nth-child(2) { animation-delay: 0.15s; }
+.ask-brain__thinking-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ask-brain-thinking {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%      { opacity: 1; transform: scale(1.1); }
+}
+
+.ask-brain__cursor {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--accent);
+  font-weight: 600;
+  animation: ask-brain-cursor 0.9s steps(2, end) infinite;
+}
+@keyframes ask-brain-cursor {
+  50% { opacity: 0; }
 }

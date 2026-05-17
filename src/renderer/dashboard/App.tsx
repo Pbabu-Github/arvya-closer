@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { BrainSeedPanel } from './components/BrainSeedPanel';
 import { DemoAutopsyPanel } from './components/DemoAutopsyPanel';
 import { FindEventsPanel } from './components/FindEventsPanel';
+import { FindPeoplePanel } from './components/FindPeoplePanel';
 import { AskBrainPanel } from './components/AskBrainPanel';
-import { LearningReceipt } from './components/LearningReceipt';
 import { AccountQueue, type Prospect } from './components/AccountQueue';
 import { SelectedAccountDetail } from './components/SelectedAccountDetail';
 import { useCountUp } from '../hooks/useCountUp';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
-type View = 'home' | 'autopsy' | 'events' | 'sources';
+type View = 'home' | 'autopsy' | 'events' | 'people' | 'sources';
 
 // ─────────────────────────────────────────────────────────────
 // Inline SVG primitives (matches the design-kit Icon / wordmark)
@@ -99,7 +99,6 @@ export function Dashboard() {
   const [pagesIndexed, setPagesIndexed] = useState<number | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [view, setView] = useState<View>('home');
-  const [receiptOpen, setReceiptOpen] = useState(false);
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
 
   // Animated count-up for Mission Scoreboard
@@ -150,17 +149,7 @@ export function Dashboard() {
 
         <div className="titlebar__spacer" />
 
-        <div className="titlebar__search">
-          <Icon name="search" size={13} />
-          <span className="titlebar__search-text">Ask the brain — DealCloud, security, buyer tracker…</span>
-          <span className="kbd">⌘</span>
-          <span className="kbd">K</span>
-        </div>
-
-        <div className="titlebar__spacer" />
-
         <div className="titlebar__right">
-          <button onClick={() => setReceiptOpen(true)} className="btn btn--ghost btn--sm">End Call</button>
           {overlayOpen ? (
             <button onClick={onCloseOverlay} className="btn btn--sm">
               <Icon name="eye" size={12} />
@@ -194,12 +183,20 @@ export function Dashboard() {
                 <span className="nav-item__shortcut">1</span>
               </button>
               <button
+                className={`nav-item ${view === 'people' ? 'nav-item--active' : ''}`}
+                onClick={() => setView('people')}
+              >
+                <span className="nav-item__icon"><Icon name="circleDot" /></span>
+                <span className="nav-item__label">Find people</span>
+                <span className="nav-item__shortcut">2</span>
+              </button>
+              <button
                 className={`nav-item ${view === 'events' ? 'nav-item--active' : ''}`}
                 onClick={() => setView('events')}
               >
                 <span className="nav-item__icon"><Icon name="circleDot" /></span>
                 <span className="nav-item__label">Find events</span>
-                <span className="nav-item__shortcut">2</span>
+                <span className="nav-item__shortcut">3</span>
               </button>
               <button className="nav-item" onClick={() => setView('autopsy')}>
                 <span className="nav-item__icon"><Icon name="autopsy" /></span>
@@ -274,6 +271,8 @@ export function Dashboard() {
                     <span className="autopsy-link__arrow">→</span>
                   </button>
                 </>
+              ) : view === 'people' ? (
+                <FindPeoplePanel />
               ) : view === 'events' ? (
                 <FindEventsPanel />
               ) : view === 'sources' ? (
@@ -295,7 +294,6 @@ export function Dashboard() {
         )}
       </main>
 
-      <LearningReceipt open={receiptOpen} onClose={() => setReceiptOpen(false)} />
     </div>
   );
 }

@@ -17,9 +17,31 @@ html, body, #root {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: 1fr auto auto auto;
-  padding: 12px;
+  grid-template-rows: 14px 1fr auto auto auto;
+  padding: 6px 12px 12px;
   gap: 8px;
+}
+
+.overlay-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  padding: 4px 0 0;
+  -webkit-app-region: drag;
+}
+.overlay-drag-handle:active { cursor: grabbing; }
+
+.overlay-drag-handle__grip {
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.28);
+  transition: background 140ms ease-out;
+}
+.overlay-drag-handle:hover .overlay-drag-handle__grip {
+  background: rgba(255, 255, 255, 0.55);
 }
 
 /* card wrap holds previous + current during crossfade */

@@ -246,6 +246,13 @@ export function Overlay() {
 
   return (
     <div className="overlay-root">
+      <div
+        className="overlay-drag-handle"
+        title="Drag to move overlay"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      >
+        <span className="overlay-drag-handle__grip" />
+      </div>
       <div className="overlay-card-wrap">
         {prevCard && crossfading && (
           <div className="overlay-card overlay-card--leaving">

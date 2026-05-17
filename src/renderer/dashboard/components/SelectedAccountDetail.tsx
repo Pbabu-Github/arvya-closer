@@ -89,6 +89,10 @@ function extractTopSnippets(raw: unknown, max: number): string[] {
     .filter((s) => s.length > 0);
 }
 
+// Per-prospect HOG enrichment cache — survives re-selects and HMR remounts so we
+// never re-bill credits for an account that's already been enriched this session.
+const ENRICH_CACHE = new Map<string, Record<string, unknown>>();
+
 export function SelectedAccountDetail({ prospect }: Props) {
   const [brainSnippets, setBrainSnippets] = useState<string[]>([]);
   const [brainLoading, setBrainLoading] = useState(false);
@@ -96,6 +100,7 @@ export function SelectedAccountDetail({ prospect }: Props) {
 
   const [enrichment, setEnrichment] = useState<Record<string, unknown> | null>(null);
   const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
 
   const [draftText, setDraftText] = useState<string | null>(null);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -108,13 +113,16 @@ export function SelectedAccountDetail({ prospect }: Props) {
 
     setBrainSnippets([]);
     setBrainError(null);
-    setEnrichment(null);
     setEnrichError(null);
     setDraftText(null);
     setDraftError(null);
 
+    // Restore cached enrichment if we've already paid HOG for this prospect.
+    setEnrichment(ENRICH_CACHE.get(prospect.slug) ?? null);
+
     if (typeof window === 'undefined' || !window.pmf) return;
 
+    // Brain search is free — fire it.
     setBrainLoading(true);
     window.pmf.gbrain
       .search(`${prospect.name} ${prospect.company}`)
@@ -127,17 +135,27 @@ export function SelectedAccountDetail({ prospect }: Props) {
       })
       .catch((e) => setBrainError(String(e)))
       .finally(() => setBrainLoading(false));
-
-    if (prospect.linkedinUrl) {
-      window.pmf.hog
-        .enrich(prospect.linkedinUrl)
-        .then((r) => {
-          if (r.ok) setEnrichment(r.result as Record<string, unknown>);
-          else setEnrichError(r.error ?? 'unknown HOG error');
-        })
-        .catch((e) => setEnrichError(String(e)));
-    }
   }, [prospect]);
+
+  const onEnrich = async () => {
+    if (!prospect.linkedinUrl || enrichLoading) return;
+    setEnrichLoading(true);
+    setEnrichError(null);
+    try {
+      const r = await window.pmf.hog.enrich(prospect.linkedinUrl);
+      if (r.ok) {
+        const result = r.result as Record<string, unknown>;
+        ENRICH_CACHE.set(prospect.slug, result);
+        setEnrichment(result);
+      } else {
+        setEnrichError(r.error ?? 'unknown HOG error');
+      }
+    } catch (e) {
+      setEnrichError(String(e));
+    } finally {
+      setEnrichLoading(false);
+    }
+  };
 
   const onDraft = async () => {
     setDraftLoading(true);
@@ -199,6 +217,15 @@ export function SelectedAccountDetail({ prospect }: Props) {
       {(prospect.linkedinUrl || enrichment) && (
         <section className="account-detail__section">
           <div className="account-detail__section-title">HOG enrichment</div>
+          {!enrichment && !enrichError && (
+            <button
+              onClick={onEnrich}
+              disabled={enrichLoading || !prospect.linkedinUrl}
+              className="btn btn--sm"
+            >
+              {enrichLoading ? 'Enriching via HOG…' : 'Enrich via HOG (uses credits)'}
+            </button>
+          )}
           {enrichError && <div className="account-detail__error">⚠️ HOG: {enrichError}</div>}
           {enrichment && (
             <dl className="account-detail__enrich">
