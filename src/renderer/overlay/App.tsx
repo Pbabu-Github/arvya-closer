@@ -9,25 +9,30 @@ type CoachCard = {
   confidence: number;
 };
 
-const DEMO_PHRASES = [
-  {
-    prospect: "Honestly, we use DealCloud — not Salesforce.",
-    stage: "objection",
-  },
-  { prospect: "The buyer tracker in Excel is never accurate.", stage: "pain" },
-  {
-    prospect: "Our CRM is usually stale — everyone works out of Outlook.",
-    stage: "pain",
-  },
-  {
-    prospect: "Security is the big question if this touches deal emails.",
-    stage: "objection",
-  },
-  { prospect: "Can you show us the product?", stage: "discovery" },
-  {
-    prospect: "How do you handle compliance review for a new vendor?",
-    stage: "objection",
-  },
+// Brain-mined prospect quotes. We pull these from gbrain on mount using
+// objection-flavored search seeds; no hardcoded fake phrases. Stage is
+// inferred heuristically from the chunk content.
+type BrainPhrase = {
+  prospect: string;
+  stage: string;
+  slug?: string; // source page for provenance — shows the user this is REAL
+  title?: string;
+};
+
+// Seed terms used to fish prospect-voice quotes out of the brain. Picked to
+// hit buyer-tracker / DealCloud / Outlook / security / pricing pain — the
+// content we actually have in 181 pages of past calls.
+const BRAIN_PHRASE_SEEDS = [
+  'objection',
+  'concerned about',
+  'we use DealCloud',
+  'buyer tracker',
+  'stale CRM',
+  'security review',
+  'how do you handle',
+  'the problem is',
+  'too expensive',
+  'compliance review',
 ];
 
 const CHUNK_MS = 5000; // send a chunk every 5s to Groq Whisper (batch endpoint, ~3-4s latency)
@@ -42,6 +47,8 @@ export function Overlay() {
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [listenError, setListenError] = useState<string | null>(null);
+  const [phrases, setPhrases] = useState<BrainPhrase[]>([]);
+  const [phrasesLoading, setPhrasesLoading] = useState(true);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -54,6 +61,21 @@ export function Overlay() {
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
+
+  // Pull real prospect quotes from the brain on mount. No hardcoded fakes —
+  // if the brain returns nothing we hide the button entirely.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const mined = await minePhrasesFromBrain();
+      if (cancelled) return;
+      setPhrases(mined);
+      setPhrasesLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Hotkeys: ⌘⇧T click-through, ⌘⇧N next demo, ⌘⇧L toggle listen
   useEffect(() => {
@@ -104,11 +126,11 @@ export function Overlay() {
     crossfade.phase === "crossfading" ? crossfade.previous : null;
 
   const triggerDemoCard = async () => {
-    if (loading) return;
-    const phrase = DEMO_PHRASES[demoIdx % DEMO_PHRASES.length]!;
+    if (loading || phrases.length === 0) return;
+    const phrase = phrases[demoIdx % phrases.length]!;
     setLoading(true);
     setTranscript((t) =>
-      [...t, `[demo] ${phrase.prospect}`].slice(-MAX_TRANSCRIPT_TURNS),
+      [...t, `[from brain] ${phrase.prospect}`].slice(-MAX_TRANSCRIPT_TURNS),
     );
     try {
       const r = (await window.pmf.coach.nextCard({
@@ -130,6 +152,9 @@ export function Overlay() {
       setLoading(false);
     }
   };
+
+  const currentPhrase: BrainPhrase | null =
+    phrases.length > 0 ? phrases[demoIdx % phrases.length]! : null;
 
   // -----------------------------------------------------------
   // LIVE AUDIO CAPTURE — getUserMedia → MediaRecorder → Groq Whisper
@@ -368,24 +393,39 @@ export function Overlay() {
             ● Start listening
           </button>
         )}
-        <button
-          onClick={triggerDemoCard}
-          disabled={loading}
-          className="overlay-demo-btn"
-          title={`Feeds a sample buyer objection to the coach so you can preview the card. Current: "${DEMO_PHRASES[demoIdx % DEMO_PHRASES.length]!.prospect}"`}
-          style={{ flex: 1 }}
-        >
-          {loading
-            ? "Coach thinking…"
-            : `Try sample objection · ${(demoIdx % DEMO_PHRASES.length) + 1}/${DEMO_PHRASES.length}`}
-        </button>
+        {phrases.length > 0 && (
+          <button
+            onClick={triggerDemoCard}
+            disabled={loading}
+            className="overlay-demo-btn"
+            title={currentPhrase ? `Real prospect quote from past call: "${currentPhrase.prospect}"` : ''}
+            style={{ flex: 1 }}
+          >
+            {loading
+              ? "Coach thinking…"
+              : `Try real objection · ${(demoIdx % phrases.length) + 1}/${phrases.length}`}
+          </button>
+        )}
       </div>
 
-      {!listening && (
+      {!listening && currentPhrase && (
         <div className="overlay-explainer">
-          <span className="overlay-explainer__label">Sample says:</span>
+          <span className="overlay-explainer__label">From brain:</span>
           <span className="overlay-explainer__quote">
-            "{DEMO_PHRASES[demoIdx % DEMO_PHRASES.length]!.prospect}"
+            "{currentPhrase.prospect}"
+          </span>
+          {currentPhrase.slug && (
+            <span className="overlay-explainer__source" title={currentPhrase.slug}>
+              · {currentPhrase.title ?? shortSlug(currentPhrase.slug)}
+            </span>
+          )}
+        </div>
+      )}
+      {!listening && phrasesLoading && phrases.length === 0 && (
+        <div className="overlay-explainer">
+          <span className="overlay-explainer__label">Mining brain…</span>
+          <span className="overlay-explainer__quote">
+            Loading real prospect quotes from past calls.
           </span>
         </div>
       )}
@@ -426,6 +466,172 @@ function CoachOverlayCard({
       <div className="overlay-card__body">{card.body.slice(0, 120)}</div>
     </div>
   );
+}
+
+/**
+ * Mine prospect-voice quotes out of gbrain. Runs once on overlay mount.
+ * Strategy: fan out a handful of objection-flavored search terms, extract
+ * short sentences from the returned chunks, score by how "prospect-shaped"
+ * they are (1st-person buyer voice, contains a complaint cue), dedupe.
+ *
+ * Returns up to 8 phrases. If gbrain is unreachable or has nothing relevant,
+ * returns [] and the overlay hides the button — better silence than fakes.
+ */
+async function minePhrasesFromBrain(): Promise<BrainPhrase[]> {
+  if (typeof window === "undefined" || !window.pmf?.gbrain?.search) return [];
+
+  const found: BrainPhrase[] = [];
+  const seen = new Set<string>();
+
+  for (const seed of BRAIN_PHRASE_SEEDS) {
+    try {
+      const r = (await window.pmf.gbrain.search(seed)) as {
+        ok: boolean;
+        result?: unknown;
+      };
+      if (!r.ok) continue;
+      const hits = parseSearchHits(r.result);
+      for (const h of hits) {
+        const text = (h.chunk_text ?? "").toString();
+        if (!text) continue;
+        const sentences = extractProspectSentences(text);
+        for (const s of sentences) {
+          const norm = s.toLowerCase().slice(0, 80);
+          if (seen.has(norm)) continue;
+          seen.add(norm);
+          found.push({
+            prospect: s,
+            stage: inferStage(s),
+            slug: h.slug,
+            title: h.title,
+          });
+          if (found.length >= 24) break;
+        }
+        if (found.length >= 24) break;
+      }
+    } catch {
+      /* skip individual seed failures */
+    }
+    if (found.length >= 24) break;
+  }
+
+  // Rank by length-sweet-spot (40-160 chars reads best in a coach card) and
+  // diversity by source slug — at most 2 quotes per slug so we don't show 6
+  // lines from the same call.
+  const perSlug = new Map<string, number>();
+  const ranked = found
+    .map((p) => ({
+      ...p,
+      __score: scorePhrase(p.prospect),
+    }))
+    .sort((a, b) => b.__score - a.__score)
+    .filter((p) => {
+      const slug = p.slug ?? "_";
+      const n = perSlug.get(slug) ?? 0;
+      if (n >= 2) return false;
+      perSlug.set(slug, n + 1);
+      return true;
+    })
+    .slice(0, 8);
+
+  return ranked.map(({ __score, ...rest }) => {
+    void __score;
+    return rest;
+  });
+}
+
+type RawHit = {
+  slug?: string;
+  title?: string;
+  chunk_text?: string;
+  score?: number;
+};
+
+function parseSearchHits(raw: unknown): RawHit[] {
+  let v: unknown = raw;
+  for (let i = 0; i < 4; i++) {
+    if (!v) break;
+    if (typeof v === "object" && "content" in (v as object)) {
+      const c = (v as { content?: Array<{ text?: string }> }).content;
+      if (Array.isArray(c) && typeof c[0]?.text === "string") {
+        try {
+          v = JSON.parse(c[0].text);
+        } catch {
+          v = c[0].text;
+        }
+        continue;
+      }
+    }
+    if (
+      typeof v === "object" &&
+      "result" in (v as object) &&
+      Object.keys(v as object).length <= 3
+    ) {
+      v = (v as { result: unknown }).result;
+      continue;
+    }
+    break;
+  }
+  return Array.isArray(v) ? (v as RawHit[]) : [];
+}
+
+// Pull sentences that read like buyer speech. We skip narration ("they said",
+// "the prospect noted") and lean toward quoted/first-person fragments.
+function extractProspectSentences(text: string): string[] {
+  // Split on sentence enders. Keeps `?` and `!` which matter for objections.
+  const rough = text
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 30 && s.length <= 220);
+
+  const out: string[] = [];
+  for (let s of rough) {
+    // Strip a leading speaker tag like "Naveen:" / "PB:" / "Prospect:"
+    s = s.replace(/^[A-Z][A-Za-z. ]{0,30}:\s+/, "");
+    // Strip surrounding quotes if present
+    s = s.replace(/^["“'](.*?)["”']$/, "$1");
+    if (!/^[A-Z“"']/.test(s) && !/^I |^We |^Our /.test(s)) continue;
+    // Skip narration cues
+    if (/\b(they said|the prospect|the buyer|the client)\b/i.test(s)) continue;
+    // Skip URLs and markdown noise
+    if (/https?:|\]\(|\\n|---/.test(s)) continue;
+    out.push(s);
+  }
+  return out;
+}
+
+function inferStage(s: string): string {
+  const lower = s.toLowerCase();
+  if (/\?$/.test(s) || /\bhow\b|\bwhat\b|\bwhy\b|\bcan you\b/.test(lower))
+    return "discovery";
+  if (/\b(security|compliance|cost|expensive|but|concern|worried)\b/.test(lower))
+    return "objection";
+  if (/\b(broken|stale|never|always|hate|frustrat|pain|hard)\b/.test(lower))
+    return "pain";
+  return "live";
+}
+
+function scorePhrase(s: string): number {
+  let score = 0;
+  const len = s.length;
+  // Sweet spot 60-150 chars
+  if (len >= 60 && len <= 150) score += 3;
+  else if (len >= 40 && len <= 180) score += 1;
+  // Bonus for prospect-voice signals
+  if (/^I |^We |^Our /.test(s)) score += 2;
+  if (/\?$/.test(s)) score += 1; // questions are great coach triggers
+  if (/\b(DealCloud|Outlook|CRM|buyer tracker|Salesforce|security)\b/i.test(s))
+    score += 2;
+  // Penalty for very short or run-on
+  if (len < 40) score -= 2;
+  if (len > 200) score -= 1;
+  return score;
+}
+
+function shortSlug(slug: string): string {
+  const tail = slug.split("/").pop() ?? slug;
+  return tail.length > 32 ? tail.slice(0, 30) + "…" : tail;
 }
 
 function pickMimeType(): string {

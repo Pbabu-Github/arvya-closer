@@ -343,3 +343,14 @@ body,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.overlay-explainer__source {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  color: rgba(194, 189, 255, 0.55);
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
