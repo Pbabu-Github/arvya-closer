@@ -163,8 +163,14 @@ export function enrichAutopsy(raw: RawAutopsy): EnrichedAutopsy {
     dateIso: t.date_iso ?? dateForTitle(t.title, fileMap),
   }));
 
+  // Spec says lanes crossing 60% of total are wedges. The precache stored
+  // threshold === total (15) which means nothing ever crosses; fix that here.
+  const total = raw.transcripts.length || 15;
+  const wedgeThreshold = Math.ceil(total * 0.6);
+
   const enrichedLanes: EnrichedLane[] = raw.lanes.map((lane) => ({
     ...lane,
+    threshold: lane.threshold >= total ? wedgeThreshold : lane.threshold,
     hitTranscriptIndices: assignLaneHits(raw.transcripts, lane),
   }));
 
