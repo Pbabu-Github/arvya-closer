@@ -281,3 +281,65 @@ body,
 .overlay-footer__state.on {
   color: #00d4aa;
 }
+
+/* =============================================================
+ * Title bar close button + sample-objection explainer
+ * ============================================================= */
+
+.overlay-titlebar__close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(232, 230, 255, 0.18);
+  border-radius: 5px;
+  color: rgba(232, 230, 255, 0.7);
+  font-family: "Inter", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition:
+    background 140ms ease-out,
+    color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.overlay-titlebar__close:hover {
+  background: rgba(255, 90, 95, 0.18);
+  color: #ff5a5f;
+  border-color: rgba(255, 90, 95, 0.55);
+}
+
+.overlay-explainer {
+  margin: 6px 12px 0;
+  padding: 6px 10px;
+  background: rgba(108, 99, 255, 0.08);
+  border: 1px dashed rgba(108, 99, 255, 0.32);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  -webkit-app-region: no-drag;
+  overflow: hidden;
+}
+.overlay-explainer__label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(194, 189, 255, 0.7);
+  white-space: nowrap;
+}
+.overlay-explainer__quote {
+  color: rgba(232, 230, 255, 0.85);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
