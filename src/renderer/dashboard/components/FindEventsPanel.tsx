@@ -6,7 +6,7 @@
  * the user can edit the search criteria.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   loadIcpContext,
   painContextBlock,
@@ -73,6 +73,27 @@ export function FindEventsPanel() {
   const [icp, setIcp] = useState<IcpContext | null>(null);
   const [icpLoading, setIcpLoading] = useState(true);
   const [reranked, setReranked] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+
+  const genRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Elapsed-time counter while HOG is running
+  useEffect(() => {
+    if (!loading) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      return;
+    }
+    setElapsed(0);
+    const started = Date.now();
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [loading]);
 
   useEffect(() => {
     SESSION_CACHE = { criteria, events, error };
@@ -99,15 +120,23 @@ export function FindEventsPanel() {
   }, []);
 
   const onSearch = async () => {
-    if (!criteria.trim()) return;
+    if (!criteria.trim() || loading) return;
+    const myGen = ++genRef.current;
     setLoading(true);
     setError(null);
     setEvents([]);
     setReranked(false);
+
+    // ICP context refresh runs in parallel — don't block HOG on the ICP round
+    // trip (was costing 1-2s of nothing-on-screen before HOG even fired).
+    const ctxPromise = loadIcpContext().then((ctx) => {
+      if (myGen === genRef.current) setIcp(ctx);
+      return ctx;
+    });
+
     try {
-      // Refresh ICP context (brain may have been seeded since mount).
-      const ctx = await loadIcpContext();
-      setIcp(ctx);
+      const ctx = await ctxPromise;
+      if (myGen !== genRef.current) return;
 
       const prompt = [
         painContextBlock(ctx),
@@ -125,6 +154,7 @@ export function FindEventsPanel() {
         error?: string;
       };
 
+      if (myGen !== genRef.current) return; // user hit Stop
       if (!r.ok) {
         setError(r.error ?? 'unknown HOG error');
         return;
@@ -140,6 +170,7 @@ export function FindEventsPanel() {
       // ZE rerank against the brain's pain query.
       if (ctx.online && ctx.painQuery && parsed.length > 1) {
         const ranked = await rerankEvents(ctx.painQuery, parsed);
+        if (myGen !== genRef.current) return;
         if (ranked) {
           parsed = ranked;
           setReranked(true);
@@ -148,10 +179,16 @@ export function FindEventsPanel() {
 
       setEvents(parsed);
     } catch (e) {
+      if (myGen !== genRef.current) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (myGen === genRef.current) setLoading(false);
     }
+  };
+
+  const onStop = () => {
+    genRef.current++;
+    setLoading(false);
   };
 
   return (
@@ -198,20 +235,49 @@ export function FindEventsPanel() {
           />
 
           <div className="findp__actions">
-            <button onClick={onSearch} disabled={loading} className="btn btn--primary">
-              {loading ? 'Researching… (30-60 sec)' : 'Find events via HOG'}
-            </button>
-            {events.length > 0 && !loading && (
-              <button
-                onClick={() => setCriteriaCollapsed(true)}
-                className="btn btn--sm btn--ghost"
-              >
-                Cancel
-              </button>
+            {!loading ? (
+              <>
+                <button onClick={onSearch} disabled={!criteria.trim()} className="btn btn--primary">
+                  Find events via HOG
+                </button>
+                {events.length > 0 && (
+                  <button
+                    onClick={() => setCriteriaCollapsed(true)}
+                    className="btn btn--sm btn--ghost"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button onClick={onStop} className="btn btn--ghost">
+                  Stop & keep results ({events.length})
+                </button>
+                <span className="findp__elapsed">⏱ {elapsed}s · HOG runs 30–90s, caps at 120s</span>
+              </>
             )}
           </div>
 
+          {loading && (
+            <div className="findp__live">
+              <span className="dot dot--accent dot--pulse" />
+              <span className="findp__live-text">
+                Sweeping HOG · {elapsed}s elapsed · {events.length} found so far
+              </span>
+            </div>
+          )}
+
           {error && <div className="outreach__error">⚠ {error}</div>}
+        </div>
+      )}
+
+      {loading && criteriaCollapsed && (
+        <div className="findp__live">
+          <span className="dot dot--accent dot--pulse" />
+          <span className="findp__live-text">
+            Sweeping HOG · {elapsed}s elapsed · {events.length} found so far
+          </span>
         </div>
       )}
 

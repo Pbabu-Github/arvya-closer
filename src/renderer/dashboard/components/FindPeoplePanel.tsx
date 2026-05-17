@@ -37,7 +37,20 @@ type Event = {
 
 type Result = { people: Person[]; events: Event[] };
 
-const DEFAULT_CRITERIA = `Find investment-banking and PE deal-team leaders (VP / Director / Principal of M&A, Coverage, RevOps, Deal Operations) in North America who would benefit from Arvya — Outlook-native CRM + buyer-tracker automation built on DealCloud schemas. Also find PE/IB conferences and roundtables in the next 90 days where these folks gather. For each person: why they'd care + a one-line outreach angle. For each event: who attends + what we'd say if we walked the floor.`;
+// Brain hits are CONTEXT, not people. The Arvya brain is seeded from transcripts
+// (slugs like meeting-notes-2024-03-foo), not person pages. So we surface brain
+// matches as a separate "Prior context" section instead of pretending they are
+// fresh prospects.
+type BrainHit = {
+  slug: string;
+  title: string;
+  excerpt: string;
+};
+
+// Default is a one-liner. The real "prompt" is built at search time from the
+// gbrain pain context + this short user intent. Edit-prompt toggle lets you
+// override with a longer hand-written criteria.
+const DEFAULT_CRITERIA = 'Who matches our ICP — and where do they gather in the next 90 days?';
 
 const SCHEMA = {
   type: 'object',
@@ -90,13 +103,30 @@ const BRAIN_SEED_QUERIES = [
 // Module-level cache so results survive sidebar tab-switches (the component
 // unmounts when the user leaves "Find people"). Only persists for the lifetime
 // of the renderer process — that's the right scope for an in-progress sweep.
+//
+// CRITICAL: written DIRECTLY from the async lanes (not only via useEffect)
+// because in React.StrictMode the panel can unmount mid-search and setState on
+// an unmounted component is silently dropped — meaning the useEffect mirror
+// never sees the final values.
 type FindPeopleCache = {
   criteria: string;
   people: Person[];
   events: Event[];
+  brainHits: BrainHit[];
   error: string | null;
 };
 let SESSION_CACHE: FindPeopleCache | null = null;
+
+function commitCache(patch: Partial<FindPeopleCache>) {
+  SESSION_CACHE = {
+    criteria: SESSION_CACHE?.criteria ?? DEFAULT_CRITERIA,
+    people: SESSION_CACHE?.people ?? [],
+    events: SESSION_CACHE?.events ?? [],
+    brainHits: SESSION_CACHE?.brainHits ?? [],
+    error: SESSION_CACHE?.error ?? null,
+    ...patch,
+  };
+}
 
 export function FindPeoplePanel() {
   const [criteria, setCriteria] = useState(
@@ -113,6 +143,9 @@ export function FindPeoplePanel() {
   );
   const [events, setEvents] = useState<Event[]>(
     () => SESSION_CACHE?.events ?? [],
+  );
+  const [brainHits, setBrainHits] = useState<BrainHit[]>(
+    () => SESSION_CACHE?.brainHits ?? [],
   );
   const [elapsed, setElapsed] = useState(0);
   // Auto-collapse the criteria card whenever there are results to show. User
@@ -180,9 +213,11 @@ export function FindPeoplePanel() {
   }, [loading]);
 
   // Mirror visible state into the module-level cache so a tab-switch keeps it.
+  // Best-effort — async lanes also write to SESSION_CACHE directly (see commitCache)
+  // because in StrictMode this effect won't run after an unmount.
   useEffect(() => {
-    SESSION_CACHE = { criteria, people, events, error };
-  }, [criteria, people, events, error]);
+    commitCache({ criteria, people, events, brainHits, error });
+  }, [criteria, people, events, brainHits, error]);
 
   // Auto-collapse the criteria card once a search settles with at least one
   // result — the prompt has done its job; get out of the user's way.
@@ -207,39 +242,47 @@ export function FindPeoplePanel() {
     setSaveState('idle');
     setSaveSlug(null);
 
-    // Refresh ICP context — brain may have been seeded since mount.
-    const ctx = await loadIcpContext();
-    if (myGen !== genRef.current) return;
-    setIcp(ctx);
+    // ICP context refresh runs in parallel — DO NOT block HOG/brain lanes on it.
+    // Pre-fix: this awaited a 2-search round trip serially before either lane
+    // even started, costing 1-2 seconds of nothing-on-screen.
+    const ctxPromise = loadIcpContext().then((ctx) => {
+      if (myGen === genRef.current) setIcp(ctx);
+      return ctx;
+    });
 
-    // ─── LANE 1: brain-first instant results (1-3s) ───
+    // ─── LANE 1: brain-first instant results (parallel fan-out, ~300-600ms) ───
+    // Pre-fix: 6 BRAIN_SEED_QUERIES ran serially in a for-loop, each MCP
+    // round trip 100-300ms → 1-2s total before anything on screen. Now they
+    // fire concurrently and the first result lands within ~300ms.
     (async () => {
       try {
+        const results = await Promise.all(
+          BRAIN_SEED_QUERIES.map((q) =>
+            window.pmf.gbrain
+              .search(q)
+              .then((r) => (r as { ok: boolean; result?: unknown }).ok
+                ? parseSearchHits((r as { result?: unknown }).result)
+                : [])
+              .catch(() => [] as SearchHit[]),
+          ),
+        );
+        if (myGen !== genRef.current) return;
+
         const brainPeople: Person[] = [];
         const seen = new Set<string>();
-        for (const q of BRAIN_SEED_QUERIES) {
-          if (myGen !== genRef.current) return;
-          try {
-            const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
-            if (!r.ok) continue;
-            const hits = parseSearchHits(r.result);
-            for (const h of hits) {
-              if (!h.slug || seen.has(h.slug)) continue;
-              if (!isPersonSlug(h.slug)) continue;
-              seen.add(h.slug);
-              brainPeople.push({
-                name: h.title ?? humanizeSlug(h.slug),
-                source: 'brain',
-                slug: h.slug,
-                why_relevant: (h.chunk_text ?? '').slice(0, 220),
-              });
-            }
-          } catch {
-            /* skip individual brain failures */
+        for (const hits of results) {
+          for (const h of hits) {
+            if (!h.slug || seen.has(h.slug)) continue;
+            if (!isPersonSlug(h.slug)) continue;
+            seen.add(h.slug);
+            brainPeople.push({
+              name: h.title ?? humanizeSlug(h.slug),
+              source: 'brain',
+              slug: h.slug,
+              why_relevant: (h.chunk_text ?? '').slice(0, 220),
+            });
           }
         }
-        if (myGen !== genRef.current) return;
-        // Just merge — ZE rerank happens after HOG so all sources are scored together.
         const merged = mergePeople(peopleRef.current, brainPeople);
         peopleRef.current = merged;
         setPeople(merged);
@@ -252,6 +295,8 @@ export function FindPeoplePanel() {
     // Inject pain context into the prompt so HOG itself is grounded in buyer language.
     (async () => {
       try {
+        const ctx = await ctxPromise; // resolves in parallel with the brain fan-out
+        if (myGen !== genRef.current) return;
         const promptHead = painContextBlock(ctx);
         const prompt = [
           promptHead,
