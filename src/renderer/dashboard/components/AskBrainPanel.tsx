@@ -88,17 +88,36 @@ export function AskBrainPanel() {
         new Set([cleaned, named, top2, finalQ].filter((s) => s && s.length > 1)),
       );
 
+      const runSearch = async (q: string): Promise<Citation[]> => {
+        try {
+          const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
+          return r.ok ? parseSearchHits(r.result, 8) : [];
+        } catch {
+          return [];
+        }
+      };
+
       const allHits: Citation[] = [];
       for (const q of queries) {
         if (myGen !== genRef.current) return; // user fired a new question — bail
-        try {
-          const r = (await window.pmf.gbrain.search(q)) as { ok: boolean; result?: unknown };
-          if (r.ok) {
-            const partial = parseSearchHits(r.result, 8);
-            for (const h of partial) allHits.push(h);
-          }
-        } catch {
-          /* skip individual search failures */
+        const hits = await runSearch(q);
+        for (const h of hits) allHits.push(h);
+      }
+      if (myGen !== genRef.current) return;
+
+      // Fallback: if every query missed, drop down to the single longest token
+      // (≥3 chars). Catches typos / informal phrasing the stopword list missed.
+      if (allHits.length === 0) {
+        const candidates = cleaned
+          .split(' ')
+          .concat(finalQ.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/))
+          .filter((t) => t.length >= 3)
+          .sort((a, b) => b.length - a.length);
+        const longest = candidates[0];
+        if (longest) {
+          if (myGen !== genRef.current) return;
+          const hits = await runSearch(longest);
+          for (const h of hits) allHits.push(h);
         }
       }
       if (myGen !== genRef.current) return;
@@ -187,23 +206,41 @@ export function AskBrainPanel() {
   }
 
   // Strip filler/question words so verbose questions tokenize cleanly for FTS.
-  // "What are Arvya buyer objections in PE/IB calls?" → "arvya buyer objections pe ib"
+  // Covers both clean forms ("what") and informal apostrophe-less contractions
+  // ("whats", "wheres", "dont") that survive `[^\w\s]` punctuation stripping.
+  // "Whats arvya vision?" → "arvya vision"
   function stripStopwords(input: string): string {
     const stopwords = new Set([
-      'a','an','the','is','are','was','were','be','been','being',
-      'what','why','when','where','who','whom','whose','how','which',
-      'do','does','did','can','could','should','would','may','might','must','will','shall',
+      'a','an','the','is','are','was','were','be','been','being','am',
+      // Question words (formal + contracted)
+      'what','whats','why','whys','when','whens','where','wheres','who','whos','whom','whose',
+      'how','hows','which',
+      // Aux verbs (formal + contracted)
+      'do','dont','does','doesnt','did','didnt','can','cant','could','couldnt',
+      'should','shouldnt','would','wouldnt','may','might','must','will','wont','shall',
+      'have','has','had','hasnt','hadnt','havent',
+      // Connectors
       'in','on','at','to','from','for','of','with','by','about','as','into','onto','over','under',
-      'our','your','their','its','his','her',
-      'me','you','we','they','them','i','us',
-      'tell','give','show','find','list','please',
-      'calls','call',
-      'and','or','but','if','then','than',
-      'this','that','these','those','some','any','all','no','not',
+      // Pronouns / possessives (formal + contracted)
+      'i','im','ive','id','ill',
+      'me','you','youre','youve','your','yours','we','were','weve','well','our','ours',
+      'they','theyre','theyve','their','theirs','them',
+      'he','hes','him','his','she','shes','her','hers',
+      'it','its','us',
+      // Verbs of inquiry
+      'tell','give','show','find','list','please','say','said','says',
+      // Generic nouns that pollute queries
+      'calls','call','thing','things','stuff','something','anything','everything','nothing',
+      // Connectors / determiners
+      'and','or','but','if','then','than','so','also','too','just','very','really',
+      'this','that','thats','these','those','some','any','all','no','not','none','more','most',
+      // Adverbs / fillers
+      'like','around','here','heres','there','theres','now','only','even','still',
     ]);
     const cleaned = input
       .toLowerCase()
-      .replace(/[^\w\s]/g, ' ') // split on slash, hyphen, punctuation — gbrain FTS treats them as token boundaries
+      .replace(/['']/g, '')      // strip apostrophes BEFORE word splitting (so what's → whats)
+      .replace(/[^\w\s]/g, ' ')   // split on slash, hyphen, punctuation
       .split(/\s+/)
       .filter((w) => w && !stopwords.has(w));
     // Return at least 1 token even if all were stopwords
