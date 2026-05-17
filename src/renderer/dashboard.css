@@ -1625,6 +1625,47 @@ body,
  * FindPeople — brain-first + Stop button + elapsed counter
  * ============================================================= */
 
+.findp__criteria-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-0);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.findp__criteria-summary-text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.findp__criteria-summary-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.findp__criteria-summary-quote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--fg-1);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .findp__actions {
   display: flex;
   align-items: center;
@@ -1660,4 +1701,71 @@ body,
   color: #8b8b9a;
   font-weight: 400;
   font-style: italic;
+}
+
+/* --- ICP grounding provenance + rerank tags --- */
+
+.findp__provenance {
+  margin: 12px 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.01em;
+}
+
+.findp__provenance strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+.findp__provenance--loading {
+  background: rgba(108, 99, 255, 0.1);
+  color: #b8b3ff;
+  border: 1px solid rgba(108, 99, 255, 0.24);
+}
+
+.findp__provenance--online {
+  background: rgba(64, 220, 140, 0.1);
+  color: #6ce0a3;
+  border: 1px solid rgba(64, 220, 140, 0.24);
+}
+
+.findp__provenance--offline {
+  background: rgba(255, 168, 64, 0.1);
+  color: #f0b85a;
+  border: 1px solid rgba(255, 168, 64, 0.28);
+  cursor: help;
+}
+
+.findp__provenance--empty {
+  background: rgba(180, 180, 200, 0.08);
+  color: #a0a0b0;
+  border: 1px solid rgba(180, 180, 200, 0.18);
+  font-style: italic;
+}
+
+.findp__score {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #6c63ff;
+  background: rgba(108, 99, 255, 0.12);
+  border: 1px solid rgba(108, 99, 255, 0.28);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.findp__rerank-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6c63ff;
+  text-transform: none;
+  letter-spacing: 0;
 }

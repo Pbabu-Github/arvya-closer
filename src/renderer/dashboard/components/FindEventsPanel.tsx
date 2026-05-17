@@ -6,7 +6,13 @@
  * the user can edit the search criteria.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import {
+  loadIcpContext,
+  painContextBlock,
+  type IcpContext,
+} from '../../../lib/icp-context';
+import { ProvenancePill, rerankEvents } from './find-helpers';
 // window.pmf types live in src/renderer/pmf-api.d.ts
 
 type Event = {
@@ -16,6 +22,7 @@ type Event = {
   url?: string;
   audience?: string;
   why_relevant?: string;
+  __score?: number;
 };
 
 const DEFAULT_CRITERIA = `PE / IB / M&A conferences and meetups in North America, next 90 days, that bring together deal-team analysts, associates, VPs, and CRM/RevOps decision-makers at investment banks and PE firms. Prioritize events where Arvya's pitch lands: Outlook-native, schema-driven CRM (incl. DealCloud), buyer-tracker automation, Deal Brain memory.`;
@@ -42,22 +49,81 @@ const EVENT_SCHEMA = {
   required: ['events'],
 } as const;
 
+// Module-level cache: survives tab-switches so the user doesn't lose their
+// search when they move between sidebar views.
+type FindEventsCache = {
+  criteria: string;
+  events: Event[];
+  error: string | null;
+};
+let SESSION_CACHE: FindEventsCache | null = null;
+
 export function FindEventsPanel() {
-  const [criteria, setCriteria] = useState(DEFAULT_CRITERIA);
+  const [criteria, setCriteria] = useState(
+    () => SESSION_CACHE?.criteria ?? DEFAULT_CRITERIA,
+  );
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [events, setEvents] = useState<Event[]>([]);
+  const [error, setError] = useState<string | null>(
+    () => SESSION_CACHE?.error ?? null,
+  );
+  const [events, setEvents] = useState<Event[]>(() => SESSION_CACHE?.events ?? []);
+  const [criteriaCollapsed, setCriteriaCollapsed] = useState(
+    () => (SESSION_CACHE?.events.length ?? 0) > 0,
+  );
+  const [icp, setIcp] = useState<IcpContext | null>(null);
+  const [icpLoading, setIcpLoading] = useState(true);
+  const [reranked, setReranked] = useState(false);
+
+  useEffect(() => {
+    SESSION_CACHE = { criteria, events, error };
+  }, [criteria, events, error]);
+
+  useEffect(() => {
+    if (!loading && events.length > 0) setCriteriaCollapsed(true);
+  }, [loading, events.length]);
+
+  // Pull ICP context on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIcpLoading(true);
+      const ctx = await loadIcpContext();
+      if (!cancelled) {
+        setIcp(ctx);
+        setIcpLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onSearch = async () => {
     if (!criteria.trim()) return;
     setLoading(true);
     setError(null);
     setEvents([]);
+    setReranked(false);
     try {
-      const r = (await window.pmf.hog.deepResearch({
-        prompt: `Find real, upcoming events that match this criteria. Return ONLY events with a verifiable date or URL. Criteria:\n\n${criteria}`,
-        schema: EVENT_SCHEMA,
-      })) as { ok: boolean; result?: unknown; error?: string };
+      // Refresh ICP context (brain may have been seeded since mount).
+      const ctx = await loadIcpContext();
+      setIcp(ctx);
+
+      const prompt = [
+        painContextBlock(ctx),
+        'Find real, upcoming events that match this criteria. Return ONLY events with a verifiable date or URL.',
+        '',
+        'Criteria:',
+        criteria,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const r = (await window.pmf.hog.deepResearch({ prompt, schema: EVENT_SCHEMA })) as {
+        ok: boolean;
+        result?: unknown;
+        error?: string;
+      };
 
       if (!r.ok) {
         setError(r.error ?? 'unknown HOG error');
@@ -65,12 +131,22 @@ export function FindEventsPanel() {
       }
 
       const result = (r.result as { result?: unknown })?.result ?? r.result;
-      const parsed = parseEvents(result);
+      let parsed = parseEvents(result);
       if (parsed.length === 0) {
         setError('No events returned. HOG may need broader criteria or more time.');
-      } else {
-        setEvents(parsed);
+        return;
       }
+
+      // ZE rerank against the brain's pain query.
+      if (ctx.online && ctx.painQuery && parsed.length > 1) {
+        const ranked = await rerankEvents(ctx.painQuery, parsed);
+        if (ranked) {
+          parsed = ranked;
+          setReranked(true);
+        }
+      }
+
+      setEvents(parsed);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -81,41 +157,72 @@ export function FindEventsPanel() {
   return (
     <>
       <div>
-        <div className="hero__eyebrow">Find events · HOG deep-research</div>
+        <div className="hero__eyebrow">Find events · HOG + ZeroEntropy · grounded in gbrain</div>
         <h1 className="hero__title">Where should we demo next?</h1>
         <div className="hero__subtitle">
-          Edit the criteria, hit search. HOG runs deep-research against the web.
+          The brain reads buyer pains from prior demos → HOG searches the web → ZeroEntropy
+          ranks events against actual buyer language.
         </div>
       </div>
 
-      <div className="card card--hero">
-        <div className="outreach__head">
-          <span className="outreach__eyebrow">Search criteria</span>
-          <span className="outreach__meta">HOG · DEEP RESEARCH</span>
-        </div>
+      <ProvenancePill ctx={icp} loading={icpLoading} />
 
-        <textarea
-          className="outreach__input events__criteria"
-          rows={5}
-          value={criteria}
-          onChange={(e) => setCriteria(e.target.value)}
-          placeholder="What kind of event are we looking for?"
-        />
-
-        <div>
-          <button onClick={onSearch} disabled={loading} className="btn btn--primary">
-            {loading ? 'Researching… (30-60 sec)' : 'Find events via HOG'}
+      {criteriaCollapsed && !loading ? (
+        <div className="findp__criteria-summary">
+          <div className="findp__criteria-summary-text">
+            <span className="findp__criteria-summary-label">Last search</span>
+            <span className="findp__criteria-summary-quote">
+              "{criteria.length > 140 ? `${criteria.slice(0, 140)}…` : criteria}"
+            </span>
+          </div>
+          <button
+            onClick={() => setCriteriaCollapsed(false)}
+            className="btn btn--sm btn--ghost"
+          >
+            Edit search
           </button>
         </div>
+      ) : (
+        <div className="card card--hero">
+          <div className="outreach__head">
+            <span className="outreach__eyebrow">Search criteria</span>
+            <span className="outreach__meta">HOG · DEEP RESEARCH</span>
+          </div>
 
-        {error && <div className="outreach__error">⚠ {error}</div>}
-      </div>
+          <textarea
+            className="outreach__input events__criteria"
+            rows={5}
+            value={criteria}
+            onChange={(e) => setCriteria(e.target.value)}
+            placeholder="What kind of event are we looking for?"
+          />
+
+          <div className="findp__actions">
+            <button onClick={onSearch} disabled={loading} className="btn btn--primary">
+              {loading ? 'Researching… (30-60 sec)' : 'Find events via HOG'}
+            </button>
+            {events.length > 0 && !loading && (
+              <button
+                onClick={() => setCriteriaCollapsed(true)}
+                className="btn btn--sm btn--ghost"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          {error && <div className="outreach__error">⚠ {error}</div>}
+        </div>
+      )}
 
       {events.length > 0 && (
         <div className="events__list">
           <div className="section-header">
             <div>
-              <div className="section-header__eyebrow">Results</div>
+              <div className="section-header__eyebrow">
+                Results
+                {reranked && <span className="findp__rerank-tag"> · ranked by ZeroEntropy</span>}
+              </div>
               <h2 className="section-header__title">{events.length} events found</h2>
             </div>
           </div>
@@ -123,7 +230,12 @@ export function FindEventsPanel() {
           {events.map((ev, i) => (
             <div key={i} className="card events__card">
               <div className="events__card-head">
-                <h3 className="events__card-title">{ev.name}</h3>
+                <h3 className="events__card-title">
+                  {ev.name}
+                  {typeof ev.__score === 'number' && (
+                    <span className="findp__score">{ev.__score.toFixed(2)}</span>
+                  )}
+                </h3>
                 {ev.url && (
                   <a href={ev.url} target="_blank" rel="noopener noreferrer" className="events__card-link">
                     open ↗
@@ -172,3 +284,5 @@ function parseEvents(raw: unknown): Event[] {
 
   return [];
 }
+
+// ProvenancePill + rerankEvents live in ./find-helpers (shared with FindPeoplePanel).

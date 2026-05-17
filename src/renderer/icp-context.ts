@@ -1,3 +1,4 @@
+/// <reference path="../renderer/pmf-api.d.ts" />
 /**
  * ICP context loader — pulls grounding from gbrain before HOG runs.
  *
@@ -63,10 +64,11 @@ export async function loadIcpContext(): Promise<IcpContext> {
     return offline('window.pmf.gbrain.search not available');
   }
 
-  const [painRes, entityRes] = await Promise.all([
+  type SearchOutcome = { ok: boolean; result?: unknown; error?: string };
+  const [painRes, entityRes] = (await Promise.all([
     window.pmf.gbrain.search(PAIN_QUERY).catch((e) => ({ ok: false, error: String(e) })),
     window.pmf.gbrain.search(ENTITY_QUERY).catch((e) => ({ ok: false, error: String(e) })),
-  ]);
+  ])) as [SearchOutcome, SearchOutcome];
 
   if (!painRes.ok) {
     return offline(painRes.error ?? 'gbrain pain search failed');
