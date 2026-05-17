@@ -279,7 +279,7 @@ app.whenReady().then(() => {
     if (!existsSync(path)) {
       return {
         ok: false,
-        error: 'precache not run yet — run scripts/precache-demo-autopsy.ts',
+        error: 'run scripts/precache-demo-autopsy.ts first',
       };
     }
     try {
