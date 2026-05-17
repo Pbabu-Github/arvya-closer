@@ -166,7 +166,7 @@ export function BrainSeedPanel() {
           <li>"Who is Naveen SB?"</li>
         </ul>
         <p className="brain-seed-panel__verify-note">
-          Run via `gbrain query …` in a terminal. If grounded answers appear, the brain is seeded.
+          Run via <code>gbrain query …</code> in a terminal. If grounded answers appear, the brain is seeded.
         </p>
       </div>
     </div>

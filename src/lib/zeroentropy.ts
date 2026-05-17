@@ -4,7 +4,7 @@ export type RerankHit = {
   document: string;
 };
 
-const ENDPOINT = 'https://api.zeroentropy.com/v1/models/rerank';
+const ENDPOINT = 'https://api.zeroentropy.dev/v1/models/rerank';
 const MODEL = 'zerank-2';
 const FALLBACK_SCORE = 0.5;
 

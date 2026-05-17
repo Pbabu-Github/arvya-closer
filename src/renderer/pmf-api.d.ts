@@ -31,6 +31,17 @@ interface SeedProgress {
   kind: string;
 }
 
+interface ProspectRow {
+  slug: string;
+  name: string;
+  company: string;
+  title?: string;
+  linkedinUrl?: string;
+  lastCallIso: string;
+  status: 'hot' | 'stalled' | 'cold' | 'new';
+  signal: string;
+}
+
 interface PMFApi {
   openOverlay: () => Promise<{ ok: boolean }>;
   hideOverlay: () => Promise<{ ok: boolean }>;
@@ -44,10 +55,15 @@ interface PMFApi {
 
   hog: {
     enrich: (linkedinUrl: string) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
+    deepResearch: (args: { prompt: string; schema: object; urls?: string[] }) =>
+      Promise<{ ok: boolean; result?: unknown; error?: string }>;
   };
 
   groq: {
-    transcribe: (audioBytes: Uint8Array) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    transcribe: (
+      audioBytes: Uint8Array,
+      mimeType?: string,
+    ) => Promise<{ ok: boolean; text?: string; error?: string }>;
   };
 
   anthropic: {
@@ -60,6 +76,10 @@ interface PMFApi {
 
   coach: {
     nextCard: (context: unknown) => Promise<{ ok: boolean; card?: unknown; error?: string }>;
+  };
+
+  prospects: {
+    list: () => Promise<{ ok: boolean; prospects?: ProspectRow[]; error?: string }>;
   };
 
   brain: {

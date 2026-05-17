@@ -13,10 +13,12 @@ const api = {
   },
   hog: {
     enrich: (linkedinUrl: string) => ipcRenderer.invoke('pmf:hog:enrich', linkedinUrl),
+    deepResearch: (args: { prompt: string; schema: object; urls?: string[] }) =>
+      ipcRenderer.invoke('pmf:hog:deep-research', args),
   },
   groq: {
-    transcribe: (audioBytes: Uint8Array) =>
-      ipcRenderer.invoke('pmf:groq:transcribe', audioBytes),
+    transcribe: (audioBytes: Uint8Array, mimeType?: string) =>
+      ipcRenderer.invoke('pmf:groq:transcribe', audioBytes, mimeType),
   },
   anthropic: {
     chat: (system: string, user: string) =>
@@ -27,6 +29,9 @@ const api = {
   },
   coach: {
     nextCard: (context: unknown) => ipcRenderer.invoke('pmf:coach:next-card', context),
+  },
+  prospects: {
+    list: () => ipcRenderer.invoke('pmf:prospects:list'),
   },
   brain: {
     seed: (extraPaths?: string[]) => ipcRenderer.invoke('pmf:brain:seed', extraPaths ?? []),

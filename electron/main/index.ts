@@ -5,7 +5,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { gbrainClient } from '../../src/lib/gbrain-client';
 import { chat as anthropicChat } from '../../src/lib/anthropic';
 import { nextCard, type CoachContext } from '../../src/lib/coach-engine';
-import { enrich as hogEnrich } from '../../src/lib/hog';
+import { enrich as hogEnrich, deepResearch as hogDeepResearch } from '../../src/lib/hog';
+import { listProspects } from '../../src/lib/prospects';
 
 // Dev-mode diagnostics: remote-debugging port so we can connect via CDP
 if (is.dev) {
@@ -201,33 +202,68 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('pmf:groq:transcribe', async (_, audioBytes: Uint8Array) => {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) return { ok: false, error: 'GROQ_API_KEY missing from env' };
-    try {
-      const form = new FormData();
-      const copy = new Uint8Array(audioBytes.byteLength);
-      copy.set(audioBytes);
-      const blob = new Blob([copy.buffer as ArrayBuffer], { type: 'audio/m4a' });
-      form.append('file', blob, 'audio.m4a');
-      form.append('model', 'whisper-large-v3');
-      form.append('response_format', 'text');
-
-      const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}` },
-        body: form,
-      });
-
-      const text = await response.text();
-      if (!response.ok) {
-        return { ok: false, error: `groq ${response.status}: ${text.slice(0, 200)}` };
+  ipcMain.handle(
+    'pmf:hog:deep-research',
+    async (_, args: { prompt: string; schema: object; urls?: string[] }) => {
+      try {
+        const result = await hogDeepResearch(args);
+        return { ok: true, result };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
-      return { ok: true, text };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  });
+    },
+  );
+
+  ipcMain.handle(
+    'pmf:groq:transcribe',
+    async (_, audioBytes: Uint8Array, mimeType?: string) => {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) return { ok: false, error: 'GROQ_API_KEY missing from env' };
+      try {
+        // Don't lie about the format — Whisper decodes based on the filename
+        // extension + content-type. The renderer records webm/opus by default.
+        const mime = (typeof mimeType === 'string' && mimeType) || 'audio/webm';
+        const ext = mime.includes('mp4')
+          ? 'mp4'
+          : mime.includes('ogg')
+            ? 'ogg'
+            : mime.includes('wav')
+              ? 'wav'
+              : mime.includes('mpeg') || mime.includes('mp3')
+                ? 'mp3'
+                : 'webm';
+
+        const form = new FormData();
+        const copy = new Uint8Array(audioBytes.byteLength);
+        copy.set(audioBytes);
+        const blob = new Blob([copy.buffer as ArrayBuffer], { type: mime });
+        form.append('file', blob, `audio.${ext}`);
+        form.append('model', 'whisper-large-v3');
+        form.append('response_format', 'text');
+        // Bias Whisper away from common silence-hallucinations
+        form.append('language', 'en');
+        form.append('temperature', '0');
+        form.append(
+          'prompt',
+          'A sales discovery call. Casual business conversation. If silent, return empty string.',
+        );
+
+        const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${apiKey}` },
+          body: form,
+        });
+
+        const text = await response.text();
+        if (!response.ok) {
+          return { ok: false, error: `groq ${response.status}: ${text.slice(0, 200)}` };
+        }
+        return { ok: true, text };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
+  );
 
   ipcMain.handle('pmf:anthropic:chat', async (_, system: string, user: string) => {
     try {
@@ -285,6 +321,14 @@ app.whenReady().then(() => {
     // forward to dashboardWindow.webContents.send('pmf:brain:seed:progress', ...).
     // For now this is a stub so the UI button compiles.
     return { ok: false, error: 'pmf:brain:seed not yet implemented (see scripts/seed-brain.ts)' };
+  });
+
+  ipcMain.handle('pmf:prospects:list', () => {
+    try {
+      return { ok: true, prospects: listProspects() };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   ipcMain.handle('pmf:brain:stats', async () => {

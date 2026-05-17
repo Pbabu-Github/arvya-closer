@@ -1,9 +1,7 @@
 /**
- * OutreachTestPanel — paste a LinkedIn URL → see HOG enrichment + GBrain context
+ * OutreachTestPanel — paste a LinkedIn URL → HOG enrichment + GBrain context
  * + Anthropic-drafted outreach message all in one place. Demo's beat 2 in compact form.
- *
- * Lives in the dashboard center pane (replaces the empty "Selected Account" placeholder
- * when an account is selected — for now it's always shown as a quick-test surface).
+ * Styled per arvya v2 design system (editorial cream/blue).
  */
 
 import { useState } from 'react';
@@ -63,7 +61,6 @@ export function OutreachTestPanel() {
       if (!r.ok) {
         setEnrichError(r.error ?? 'unknown HOG error');
       } else {
-        // The HOG enrichment shape is loose — try several keys to surface what we got
         const raw = r.result as Record<string, unknown> | undefined;
         const merged: EnrichResult = {
           name: pickString(raw, ['name', 'full_name', 'fullName']),
@@ -76,7 +73,6 @@ export function OutreachTestPanel() {
         };
         setEnrichResult(merged);
 
-        // Pull a couple of brain snippets that match the company name or title
         try {
           const queryText = `${merged.company ?? ''} ${merged.title ?? ''}`.trim();
           if (queryText.length > 1) {
@@ -86,7 +82,7 @@ export function OutreachTestPanel() {
             }
           }
         } catch {
-          // brain failure is non-fatal — outreach can still draft from HOG context alone
+          // brain failure is non-fatal
         }
       }
     } catch (e) {
@@ -129,12 +125,23 @@ export function OutreachTestPanel() {
   };
 
   return (
-    <div className="outreach-test">
-      <div className="outreach-test__title">Find people · Draft outreach</div>
-      <div className="outreach-test__row">
+    <div className="card card--hero">
+      <div className="outreach__head">
+        <span className="outreach__eyebrow">Find people · Outreach</span>
+        <span className="outreach__meta">HOG · BRAIN · CLAUDE SONNET 4.6</span>
+      </div>
+
+      <div>
+        <h2 className="outreach__title">Bring me one LinkedIn URL.</h2>
+        <div className="outreach__subtitle">
+          I'll enrich, find what we already know about their firm, and draft the DM.
+        </div>
+      </div>
+
+      <div className="outreach__row">
         <input
-          className="outreach-test__input"
-          placeholder="https://www.linkedin.com/in/<handle>"
+          className="outreach__input"
+          placeholder="https://www.linkedin.com/in/<handle>/"
           value={linkedinUrl}
           onChange={(e) => setLinkedinUrl(e.target.value)}
           onKeyDown={(e) => {
@@ -146,42 +153,55 @@ export function OutreachTestPanel() {
         </button>
       </div>
 
-      {enrichError && <div className="outreach-test__error">⚠️ HOG: {enrichError}</div>}
+      {enrichError && <div className="outreach__error">⚠ HOG: {enrichError}</div>}
 
       {enrichResult && (
-        <div className="outreach-test__card">
-          <div className="outreach-test__field"><strong>Name:</strong> {enrichResult.name ?? '—'}</div>
-          <div className="outreach-test__field"><strong>Title:</strong> {enrichResult.title ?? '—'}</div>
-          <div className="outreach-test__field"><strong>Company:</strong> {enrichResult.company ?? '—'}</div>
-          <div className="outreach-test__field"><strong>Email:</strong> {enrichResult.email ?? '—'}</div>
-          <div className="outreach-test__field"><strong>Phone:</strong> {enrichResult.phone ?? '—'}</div>
+        <div className="outreach__result">
+          <div className="outreach__field-grid">
+            <div className="outreach__field">
+              <span className="outreach__field-label">Name</span>
+              <span className="outreach__field-value">{enrichResult.name ?? '—'}</span>
+            </div>
+            <div className="outreach__field">
+              <span className="outreach__field-label">Title</span>
+              <span className="outreach__field-value">{enrichResult.title ?? '—'}</span>
+            </div>
+            <div className="outreach__field">
+              <span className="outreach__field-label">Company</span>
+              <span className="outreach__field-value">{enrichResult.company ?? '—'}</span>
+            </div>
+            <div className="outreach__field">
+              <span className="outreach__field-label">Email</span>
+              <span className="outreach__field-value">{enrichResult.email ?? '—'}</span>
+            </div>
+          </div>
 
           {brainSnippets.length > 0 && (
-            <div className="outreach-test__brain">
-              <div className="outreach-test__section-title">Brain context · {brainSnippets.length} hits</div>
-              <ul className="outreach-test__brain-list">
+            <>
+              <div className="outreach__section-label">Brain context · {brainSnippets.length} hits from past calls</div>
+              <ul className="outreach__brain-list">
                 {brainSnippets.map((s, i) => (
-                  <li key={i}>{s}</li>
+                  <li key={i}>"{s}"</li>
                 ))}
               </ul>
-            </div>
+            </>
           )}
 
-          <button onClick={onDraft} disabled={draftLoading} className="btn btn--primary outreach-test__draft-btn">
-            {draftLoading ? 'Drafting via Claude Sonnet…' : 'Draft outreach DM'}
+          <button onClick={onDraft} disabled={draftLoading} className="btn btn--primary">
+            {draftLoading ? 'Drafting via Claude Sonnet 4.6…' : 'Draft outreach DM'}
           </button>
 
-          {draftError && <div className="outreach-test__error">⚠️ Anthropic: {draftError}</div>}
+          {draftError && <div className="outreach__error">⚠ Anthropic: {draftError}</div>}
 
           {draftText && (
-            <div className="outreach-test__draft">
-              <div className="outreach-test__section-title">Drafted DM (Anthropic + brain context)</div>
-              <pre className="outreach-test__draft-text">{draftText}</pre>
-              <div className="outreach-test__draft-actions">
-                <button onClick={() => navigator.clipboard?.writeText(draftText)} className="btn btn--ghost">
+            <div className="outreach__draft-block">
+              <div className="outreach__section-label">Drafted DM (HOG + brain + Claude)</div>
+              <pre className="outreach__draft-text">{draftText}</pre>
+              <div className="outreach__draft-actions">
+                <button onClick={() => navigator.clipboard?.writeText(draftText)} className="btn btn--sm">
                   Copy
                 </button>
-                <button onClick={onDraft} className="btn btn--ghost">
+                <button onClick={onDraft} className="btn btn--sm">
                   Regenerate
                 </button>
               </div>
@@ -212,8 +232,6 @@ function pickString(raw: Record<string, unknown> | undefined, keys: string[]): s
 }
 
 function extractTopSnippets(raw: unknown, max: number): string[] {
-  // gbrain MCP returns { content: [{type:'text', text: '<JSON array string>'}] }
-  // or sometimes already parsed. Be defensive.
   let arr: Array<{ chunk_text?: string; title?: string }> = [];
   try {
     let text: string | null = null;
