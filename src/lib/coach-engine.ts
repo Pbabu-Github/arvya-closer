@@ -76,18 +76,36 @@ function sanitize(card: CoachCard): CoachCard {
 }
 
 function deterministicMatch(joined: string): CoachCard | null {
-  const dealcloud = /dealcloud|deal\s?cloud/.test(joined);
-  if (dealcloud) return CARD_DEALCLOUD;
+  // Require word boundaries on single tokens so Whisper noise like "watching"
+  // doesn't fire "watch us through", "show" doesn't fire "over-demo" guard, etc.
+  if (/\b(deal\s?cloud|intapp)\b/.test(joined)) return CARD_DEALCLOUD;
 
-  if (/salesforce/.test(joined) && dealcloud) return CARD_DEALCLOUD;
+  if (
+    /\b(soc\s?2|hipaa|compliance review|security review|security questionnaire|tenant isolation|data residency)\b/.test(
+      joined,
+    )
+  ) {
+    return CARD_SECURITY;
+  }
 
-  if (/security|soc.?2|compliance/.test(joined)) return CARD_SECURITY;
+  if (/\b(buyer\s?tracker|excel\s?tracker|buyer racetrack|process tracker)\b/.test(joined)) {
+    return CARD_BUYER_TRACKER;
+  }
 
-  if (/buyer.?tracker|excel.?tracker/.test(joined)) return CARD_BUYER_TRACKER;
+  if (
+    /\bcrm\b.*\b(stale|never accurate|out of date|week behind)\b/.test(joined) ||
+    /\bworks?\s+out\s+of\s+outlook\b/.test(joined)
+  ) {
+    return CARD_CRM_STALE;
+  }
 
-  if (/crm.*stale|outlook|never accurate/.test(joined)) return CARD_CRM_STALE;
-
-  if (/can you show|walk.*through|demo.*product/.test(joined)) return CARD_OVER_DEMO;
+  if (
+    /\b(can you show|show us|walk us through|walk me through|demo the product|jump into the demo)\b/.test(
+      joined,
+    )
+  ) {
+    return CARD_OVER_DEMO;
+  }
 
   return null;
 }

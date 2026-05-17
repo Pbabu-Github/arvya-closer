@@ -269,3 +269,5 @@ export const gbrainClient = {
     return normalizeIdentity(await mcpCall('get_brain_identity'));
   },
 };
+
+export default gbrainClient;

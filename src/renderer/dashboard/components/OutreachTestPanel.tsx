@@ -59,22 +59,48 @@ export function OutreachTestPanel() {
     try {
       const r = (await window.pmf.hog.enrich(linkedinUrl.trim())) as { ok: boolean; result?: unknown; error?: string };
       if (!r.ok) {
-        setEnrichError(r.error ?? 'unknown HOG error');
+        const msg = r.error ?? 'unknown HOG error';
+        // Friendlier message for the most common failure mode
+        if (msg.includes('402') || msg.toLowerCase().includes('insufficient credit')) {
+          setEnrichError('HOG credits exhausted — top up at developer.thehog.ai to enable real enrichment. (We have 352 / required 2200 right now.)');
+        } else if (msg.includes('429') || msg.toLowerCase().includes('too many request')) {
+          setEnrichError('HOG rate-limited. Wait 20 sec and try again.');
+        } else if (msg.includes('Validation')) {
+          setEnrichError('HOG rejected the URL shape. Use https://www.linkedin.com/in/<handle>/');
+        } else {
+          setEnrichError(msg);
+        }
       } else {
-        const raw = r.result as Record<string, unknown> | undefined;
+        // HOG enrich returns { id, status, result: { contact: { email: [...], phone: [...] } }, raw }
+        // Drill into r.result.result if it exists; HOG's "fields" output lives there.
+        const root = r.result as Record<string, unknown> | undefined;
+        const data: Record<string, unknown> =
+          (root && typeof root.result === 'object' && root.result)
+            ? (root.result as Record<string, unknown>)
+            : (root ?? {});
+
         const merged: EnrichResult = {
-          name: pickString(raw, ['name', 'full_name', 'fullName']),
-          title: pickString(raw, ['title', 'job_title', 'role']),
-          company: pickString(raw, ['company', 'organization', 'company_name']),
-          email: pickString(raw, ['email', 'contact.email']),
-          phone: pickString(raw, ['phone', 'contact.phone']),
+          name: pickString(data, [
+            'contact.name', 'contact.full_name', 'name', 'full_name', 'fullName',
+            'person.name', 'person.full_name',
+          ]),
+          title: pickString(data, [
+            'contact.title', 'contact.job_title', 'title', 'job_title', 'role',
+            'person.title', 'experience.title',
+          ]),
+          company: pickString(data, [
+            'contact.company', 'company', 'organization', 'company_name',
+            'experience.company', 'person.company',
+          ]),
+          email: pickString(data, ['contact.email', 'email', 'emails']),
+          phone: pickString(data, ['contact.phone', 'phone', 'phones']),
           linkedinUrl: linkedinUrl.trim(),
-          raw,
+          raw: root,
         };
         setEnrichResult(merged);
 
         try {
-          const queryText = `${merged.company ?? ''} ${merged.title ?? ''}`.trim();
+          const queryText = `${merged.company ?? ''} ${merged.title ?? ''} ${merged.name ?? ''}`.trim();
           if (queryText.length > 1) {
             const s = (await window.pmf.gbrain.search(queryText)) as { ok: boolean; result?: unknown };
             if (s.ok && s.result) {
@@ -226,28 +252,44 @@ function pickString(raw: Record<string, unknown> | undefined, keys: string[]): s
         break;
       }
     }
+    // HOG returns arrays for multi-valued fields (e.g. email: ["a@b.com"]).
+    // Coerce first non-empty string out of an array.
+    if (Array.isArray(cur)) {
+      for (const item of cur) {
+        if (typeof item === 'string' && item.trim()) return item.trim();
+      }
+      continue;
+    }
     if (typeof cur === 'string' && cur.trim()) return cur.trim();
+    if (typeof cur === 'number') return String(cur);
   }
   return undefined;
 }
 
 function extractTopSnippets(raw: unknown, max: number): string[] {
-  let arr: Array<{ chunk_text?: string; title?: string }> = [];
-  try {
-    let text: string | null = null;
-    if (raw && typeof raw === 'object' && 'content' in raw) {
-      const c = (raw as { content?: Array<{ text?: string }> }).content;
-      if (Array.isArray(c) && c[0]?.text) text = c[0].text;
+  // Tolerant: handle (a) already-parsed array, (b) {content:[{text}]} MCP envelope,
+  // (c) string of JSON, (d) nested {result: ...}.
+  let cur: unknown = raw;
+  for (let i = 0; i < 4; i++) {
+    if (!cur) break;
+    if (Array.isArray(cur)) break;
+    if (typeof cur === 'object' && 'content' in (cur as object)) {
+      const c = (cur as { content?: Array<{ text?: string }> }).content;
+      if (Array.isArray(c) && typeof c[0]?.text === 'string') {
+        try { cur = JSON.parse(c[0].text); } catch { cur = c[0].text; }
+        continue;
+      }
     }
-    if (text) {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) arr = parsed;
-    } else if (Array.isArray(raw)) {
-      arr = raw as Array<{ chunk_text?: string; title?: string }>;
+    if (typeof cur === 'object' && 'result' in (cur as object)) {
+      cur = (cur as { result: unknown }).result;
+      continue;
     }
-  } catch {
-    // ignore
+    if (typeof cur === 'string') {
+      try { cur = JSON.parse(cur); continue; } catch { break; }
+    }
+    break;
   }
+  const arr = Array.isArray(cur) ? (cur as Array<{ chunk_text?: string }>) : [];
   return arr
     .slice(0, max)
     .map((r) => (r.chunk_text ?? '').slice(0, 240).replace(/\s+/g, ' ').trim())
